@@ -2,6 +2,7 @@ import unrealcv
 from manual_ctrl import ManualController
 from pynput.keyboard import Listener
 from command import Commander
+from plot_inputs import InputPlotter
 
 # setup
 ManualControlEnabled = True
@@ -15,7 +16,8 @@ if not client.isconnected():
 
 
 cmd = Commander(client, goal_heading_deg=90)
-manual = ManualController(cmd)
+plotter = InputPlotter(client)
+manual = ManualController(cmd, plotter)
 
 
 if ManualControlEnabled:
