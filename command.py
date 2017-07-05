@@ -1,12 +1,21 @@
 # action
 import math
+import numpy as np
 
 
 class Commander:
 
-    def __init__(self, client):
+    def __init__(self, client, goal_heading_deg):
         self.client = client
         self.trajectory = []
+
+        # navigation goal direction
+        self.goal_heading = goal_heading_deg
+        self.goal_vector = [math.cos(math.radians(self.goal_heading)), math.sin(math.radians(self.goal_heading)), 0.0]
+
+        # RL rewards
+        self.goal_direction_reward = 1.0
+        self.crash_reward = -10.0
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
@@ -84,7 +93,6 @@ class Commander:
             assert res == 'ok', 'Fail to set camera rotation'
         if loc_cmd != 0.0:
             res = self.client.request('vset /camera/0/moveto {} {} {}'.format(*new_loc))
-            print(res)
             if res != 'ok':
                 print('Collision. Failed to move to position.')
                 collision = True
@@ -92,5 +100,16 @@ class Commander:
 
             self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
-        # calculate_reward(goal_vector, displacement=displacement, collision=collision)
+        self.calculate_reward(displacement=displacement, collision=collision)
         return collision
+
+    def calculate_reward(self, displacement, collision=False):
+
+        norm_displacement = np.array(displacement) / np.linalg.norm(np.array(displacement))
+        reward = np.dot(np.array(self.goal_vector), norm_displacement) * self.goal_direction_reward
+        if collision:
+            reward += self.crash_reward
+
+        print('reward: {}'.format(reward))
+
+        return reward

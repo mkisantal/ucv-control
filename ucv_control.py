@@ -14,7 +14,7 @@ if not client.isconnected():
     print('UnrealCV server is not running. Run the game downloaded from http://unrealcv.github.io first.')
 
 
-cmd = Commander(client)
+cmd = Commander(client, goal_heading_deg=90)
 manual = ManualController(cmd)
 
 
