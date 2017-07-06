@@ -3,9 +3,9 @@ from pynput.keyboard import Key, Listener, KeyCode
 
 class ManualController:
 
-    def __init__(self, commander, plotter):
+    def __init__(self, commander):  # plotter
         self.cmd = commander
-        self.plotter = plotter
+        # self.plotter = plotter
 
     def on_press(self, key):
 
@@ -27,7 +27,7 @@ class ManualController:
         if key == Key.tab:
             self.cmd.sim_command('change_view')
 
-        self.plotter.render()
+        # self.plotter.render()
 
     @staticmethod
     def on_release(key):

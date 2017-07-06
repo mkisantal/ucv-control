@@ -16,8 +16,8 @@ if not client.isconnected():
 
 
 cmd = Commander(client, goal_heading_deg=90)
-plotter = InputPlotter(client)
-manual = ManualController(cmd, plotter)
+# plotter = InputPlotter(client)
+manual = ManualController(cmd) #plotter
 
 
 if ManualControlEnabled:
