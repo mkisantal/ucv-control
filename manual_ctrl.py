@@ -27,6 +27,9 @@ class ManualController:
         if key == Key.tab:
             self.cmd.sim_command('change_view')
 
+        if key == KeyCode.from_char("o"):
+            self.cmd.get_observation()
+
         # self.plotter.render()
 
     @staticmethod

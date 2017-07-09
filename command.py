@@ -1,6 +1,8 @@
 # action
 import math
 import numpy as np
+import StringIO
+import PIL.Image
 
 
 class Commander:
@@ -100,8 +102,8 @@ class Commander:
 
             self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
-        self.calculate_reward(displacement=displacement, collision=collision)
-        return collision
+        reward = self.calculate_reward(displacement=displacement, collision=collision)
+        return reward
 
     def calculate_reward(self, displacement, collision=False):
 
@@ -113,3 +115,23 @@ class Commander:
         print('reward: {}'.format(reward))
 
         return reward
+
+    @staticmethod
+    def _read_npy(res):
+        return np.load(StringIO.StringIO(res))
+
+    @staticmethod
+    def _read_png(res):
+        img = PIL.Image.open(StringIO.StringIO(res))
+        return np.asarray(img)
+
+    def get_observation(self):
+        res = self.client.request('vget /camera/0/lit png')
+        rgba = self._read_png(res)
+        # img = PIL.Image.fromarray(image[:, :, :3], 'RGB')
+        # img.show()
+        rgb = rgba[:, :, :3]
+
+        import baselines
+
+        return rgb
