@@ -125,13 +125,14 @@ class Commander:
         img = PIL.Image.open(StringIO.StringIO(res))
         return np.asarray(img)
 
-    def get_observation(self):
+    def get_observation(self, grayscale=False):
         res = self.client.request('vget /camera/0/lit png')
         rgba = self._read_png(res)
         # img = PIL.Image.fromarray(image[:, :, :3], 'RGB')
         # img.show()
         rgb = rgba[:, :, :3]
-
-        import baselines
-
-        return rgb
+        if grayscale is True:
+            gray = np.mean(rgb, 2)
+            return gray
+        else:
+            return rgb
