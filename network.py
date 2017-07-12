@@ -12,9 +12,9 @@ def normalized_columns_initializer(std=1.0):
     return _initializer
 
 
-class AC_Network():
-    def __init__(self):
-        
+class ACNetwork:
+    def __init__(self, scope, trainer):
+
         action_space_size = 3
 
         self.inputs = tf.placeholder(shape=[None, 84, 84, 3], dtype=tf.float32)  # grayscale or RGB?
@@ -43,11 +43,12 @@ class AC_Network():
         rnn_in = tf.expand_dims(hidden, [0])
         step_size = tf.shape(self.inputs)[:1]
         state_in = rnn.LSTMStateTuple(c_in, h_in)
-        lstm_outputs, lstm_state = tf.nn.dynamic_rnn(lstm_cell,
-                                                      rnn_in,
-                                                      sequence_length=step_size,
-                                                      initial_state=state_in,
-                                                      time_major=False)
+        lstm_outputs, lstm_state = \
+            tf.nn.dynamic_rnn(lstm_cell,
+                              rnn_in,
+                              sequence_length=step_size,
+                              initial_state=state_in,
+                              time_major=False)
         lstm_c, lstm_h = lstm_state
         self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
         rnn_out = tf.reshape(lstm_outputs, [-1, 256])
@@ -58,13 +59,30 @@ class AC_Network():
                                            biases_initializer=None)
         self.value = slim.fully_connected(rnn_out, 1,
                                           activation_fn=None,
-                                          weights_initializer=normalized_columns_initializer(),
+                                          weights_initializer=normalized_columns_initializer(1.0),
                                           biases_initializer=None
                                           )
 
+        if scope != 'global':
+            self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
+            self.actions_onehot = tf.one_hot(self.actions, action_space_size, dtype=tf.float32)
+            self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
+            self.advantages = tf.placeholder(shape=[None], dtype=tf.float32)
 
+            self.responsible_outputs = tf.reduce_sum(self.policy * self.actions_onehot, [1])
 
+            self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
+            self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy))
+            self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs) * self.advantages)
+            self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy * 0.01
 
+            local_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
+            self.gradients = tf.gradients(self.loss, local_vars)
+            self.var_norms = tf.global_norm(local_vars)
+            grads, self.grad_norms = tf.clip_by_global_norm(self.gradients, 40.0)
+
+            global_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'global')
+            self.apply_grads = trainer.apply_gradients(zip(grads, global_vars))
 
 
 
