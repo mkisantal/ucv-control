@@ -28,7 +28,10 @@ class ManualController:
             self.cmd.sim_command('change_view')
 
         if key == KeyCode.from_char("o"):
-            self.cmd.get_observation()
+            self.cmd.get_observation(show=True)
+
+        if key == KeyCode.from_char("g"):
+            self.cmd.get_observation(grayscale=True, show=True)
 
         # self.plotter.render()
 
