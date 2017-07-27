@@ -102,7 +102,7 @@ class ACNetwork:
 
 
 class Worker:
-    def __init__(self, name, model_path, trainer, global_episodes):
+    def __init__(self, name, model_path, trainer, global_episodes, game):
         self.name = 'worker' + str(name)
         self.number = name
         self.model_path = model_path
@@ -118,7 +118,8 @@ class Worker:
         self.update_local_ops = update_target_graph('global', self.name)
 
         # setting up game here
-        self.env = []  # UnrealCV
+        self.env = game  # UnrealCV controller
+        self.actions = self.env.action_space
 
     def train(self, rollout, bootstrap_value, gamma, sess):
         rollout = np.array(rollout)
@@ -150,7 +151,6 @@ class Worker:
                                               feed_dict=feed_dict)
         return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
 
-
     def work(self, max_episode_length, gamma, sess, coord, saver):
         episode_count = sess.run(self.global_episodes)
         total_steps = 0
@@ -167,10 +167,10 @@ class Worker:
             self.env.new_episode()
             s = self.env.get_state().screen_buffer
             episode_frames.append(s)
-            s = process_frame(s)
+            # s = process_frame(s)
             rnn_state = self.local_AC.state_init
 
-            while self.env.is_episode_finished() == False:
+            while self.env.is_episode_finished() is False:
                 a_dist, v, rnn_state = sess.run([self.local_AC.policy,
                                                  self.local_AC.value,
                                                  self.local_AC.state_out],
@@ -180,12 +180,12 @@ class Worker:
                 a = np.random.choice(a_dist[0], p=a_dist[0])
                 a = np.argmax(a_dist == a)
 
-                r = self.env.make_action(self.actions[a])
+                r = self.env.action(self.actions[a])
                 d = self.env.is_episode_finished()
-                if d == False:
+                if d is False:
                     s1 = self.env.get_state().screen_buffer
                     episode_frames.append(s1)
-                    s1 = process_frame(s1)
+                    # s1 = process_frame(s1)
                 else:
                     s1 = s
 
@@ -197,7 +197,7 @@ class Worker:
                 total_steps += 1
                 episode_step_count += 1
 
-                if len(episode_buffer) == 30 and d != True and episode_step_count != max_episode_length-1:
+                if (len(episode_buffer) == 30 and d is not True) and (episode_step_count != max_episode_length-1):
                     v1 = sess.run(self.local_AC.value,
                                   feed_dict={self.local_AC.inputs: [s],
                                              self.local_AC.state_in[0]: rnn_state[0],

@@ -2,7 +2,7 @@ import unrealcv
 from manual_ctrl import ManualController
 from pynput.keyboard import Listener
 from command import Commander
-from plot_inputs import InputPlotter
+import network as net
 
 # setup
 ManualControlEnabled = True
@@ -16,10 +16,12 @@ if not client.isconnected():
 
 
 cmd = Commander(client, goal_heading_deg=90)
-# plotter = InputPlotter(client)
-manual = ManualController(cmd) #plotter
+manual = ManualController(cmd)
 
 
 if ManualControlEnabled:
     with Listener(on_press=manual.on_press, on_release=manual.on_release) as listener:
         listener.join()
+else:
+    # do RL training
+    wrkr = net.Worker('worker_name', 'path', None, None, cmd)

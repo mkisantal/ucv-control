@@ -19,6 +19,11 @@ class Commander:
         self.goal_direction_reward = 1.0
         self.crash_reward = -10.0
 
+        # Agent actions
+        self.action_space = ('left', 'right', 'forward', 'backward')
+
+        self.is_episode_finished = False
+
     def action(self, cmd):
         angle = 20.0  # degrees/step
         speed = 20.0  # cm/step
@@ -39,8 +44,8 @@ class Commander:
             # move(loc_cmd=-speed)
             loc_cmd[0] = -speed
 
-        self.move(loc_cmd[0], rot_cmd)  # change this to full loc_cmd vector
-        return
+        reward = self.move(loc_cmd[0], rot_cmd)  # TODO: change this to full loc_cmd vector
+        return reward
 
     def sim_command(self, cmd):
         if cmd == 'save_view':
@@ -103,6 +108,8 @@ class Commander:
             self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
         reward = self.calculate_reward(displacement=displacement, collision=collision)
+        if collision:
+            self.is_episode_finished = True
         return reward
 
     def calculate_reward(self, displacement, collision=False):
@@ -139,3 +146,12 @@ class Commander:
             img.show()
 
         return observation
+
+    def new_episode(self):
+        # simple respawn: just turn around
+        self.move(rot_cmd=(0.0, 180.0, 0.0))
+        self.is_episode_finished = False
+        return
+
+    def is_episode_finished(self):
+        return self.is_episode_finished
