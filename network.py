@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import tensorflow.contrib.rnn as rnn
+import scipy.signal
 
 
 def normalized_columns_initializer(std=1.0):
@@ -10,6 +11,21 @@ def normalized_columns_initializer(std=1.0):
         out *= std / np.sqrt(np.square(out).sum(axis=0, keepdims=True))
         return tf.constant(out)
     return _initializer
+
+
+def update_target_graph(from_scope, to_scope):
+    from_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, from_scope)
+    to_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, to_scope)
+
+    op_holder = []
+
+    for from_var, to_var in zip(from_vars, to_vars):
+        op_holder.append(to_var.assign(from_var))
+    return op_holder
+
+
+def discount(x, gamma):
+    return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 
 class ACNetwork:
@@ -36,18 +52,18 @@ class ACNetwork:
         lstm_cell = rnn.BasicLSTMCell(256, state_is_tuple=True)
         c_init = np.zeros((1, lstm_cell.state_size.c), tf.float32)
         h_init = np.zeros((1, lstm_cell.state_size.h), tf.float32)
-        # self.state_init = [c_init, h_init]
+        self.state_init = [c_init, h_init]
         c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
         h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
         # self.state_in = (c_in, h_in)
         rnn_in = tf.expand_dims(hidden, [0])
         step_size = tf.shape(self.inputs)[:1]
-        state_in = rnn.LSTMStateTuple(c_in, h_in)
+        self.state_in = rnn.LSTMStateTuple(c_in, h_in)
         lstm_outputs, lstm_state = \
             tf.nn.dynamic_rnn(lstm_cell,
                               rnn_in,
                               sequence_length=step_size,
-                              initial_state=state_in,
+                              initial_state=self.state_in,
                               time_major=False)
         lstm_c, lstm_h = lstm_state
         self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
@@ -83,6 +99,146 @@ class ACNetwork:
 
             global_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'global')
             self.apply_grads = trainer.apply_gradients(zip(grads, global_vars))
+
+
+class Worker:
+    def __init__(self, name, model_path, trainer, global_episodes):
+        self.name = 'worker' + str(name)
+        self.number = name
+        self.model_path = model_path
+        self.trainer = trainer
+        self.global_episodes = global_episodes
+        self.increment = global_episodes.assign_add(1)
+        self.episode_rewards = []
+        self.episode_lengths = []
+        self.episode_mean_values = []
+        self.summary_writer = tf.summary.FileWriter('train' + str(self.number))
+
+        self.local_AC = ACNetwork(self.name, trainer)
+        self.update_local_ops = update_target_graph('global', self.name)
+
+        # setting up game here
+        self.env = []  # UnrealCV
+
+    def train(self, rollout, bootstrap_value, gamma, sess):
+        rollout = np.array(rollout)
+        observations = rollout[:, 0]
+        actions = rollout[:, 1]
+        rewards = rollout[:, 2]
+        next_observations = rollout[:, 3]
+        values = rollout[:, 5]
+
+        self.rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
+        discounted_rewards = discount(self.rewards_plus, gamma)[:-1]
+        self.value_plus = np.asarray(values.tolist() + [bootstrap_value])
+        advantages = rewards + gamma * self.value_plus[1:] - self.value_plus[:-1]   # GAE?
+        advantages = discount(advantages, gamma)
+
+        rnn_state = self.local_AC.state_init
+        feed_dict = {self.local_AC.target_v: discounted_rewards,
+                     self.local_AC.inputs: np.vstack(observations),
+                     self.local_AC.actions: actions,
+                     self.local_AC.advantages: advantages,
+                     self.local_AC.state_in[0]: rnn_state[0],
+                     self.local_AC.state_in[1]: rnn_state[1]}
+        v_l, p_l, e_l, g_n, v_n, _ = sess.run([self.local_AC.value_loss,
+                                               self.local_AC.policy_loss,
+                                               self.local_AC.entropy,
+                                               self.local_AC.grad_norms,
+                                               self.local_AC.var_norms,
+                                               self.local_AC.apply_grads],
+                                              feed_dict=feed_dict)
+        return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
+
+
+    def work(self, max_episode_length, gamma, sess, coord, saver):
+        episode_count = sess.run(self.global_episodes)
+        total_steps = 0
+        print('Starting worker ' + str(self.number))
+        with sess.as_default(), sess.graph.as_default():
+            sess.run(self.update_local_ops)
+            episode_buffer = []
+            episode_values = []
+            episode_frames = []
+            episode_reward = 0
+            episode_step_count = 0
+            d = False
+
+            self.env.new_episode()
+            s = self.env.get_state().screen_buffer
+            episode_frames.append(s)
+            s = process_frame(s)
+            rnn_state = self.local_AC.state_init
+
+            while self.env.is_episode_finished() == False:
+                a_dist, v, rnn_state = sess.run([self.local_AC.policy,
+                                                 self.local_AC.value,
+                                                 self.local_AC.state_out],
+                                                feed_dict={self.local_AC.inputs: [s],
+                                                           self.local_AC.state_in[0]: rnn_state[0],
+                                                           self.local_AC.state_in[1]: rnn_state[1]})
+                a = np.random.choice(a_dist[0], p=a_dist[0])
+                a = np.argmax(a_dist == a)
+
+                r = self.env.make_action(self.actions[a])
+                d = self.env.is_episode_finished()
+                if d == False:
+                    s1 = self.env.get_state().screen_buffer
+                    episode_frames.append(s1)
+                    s1 = process_frame(s1)
+                else:
+                    s1 = s
+
+                episode_buffer.append([s, a, r, s1, d, v[0, 0]])
+                episode_values.append(v[0, 0])
+
+                episode_reward += r
+                s = s1
+                total_steps += 1
+                episode_step_count += 1
+
+                if len(episode_buffer) == 30 and d != True and episode_step_count != max_episode_length-1:
+                    v1 = sess.run(self.local_AC.value,
+                                  feed_dict={self.local_AC.inputs: [s],
+                                             self.local_AC.state_in[0]: rnn_state[0],
+                                             self.local_AC.state_in[1]: rnn_state[1]})
+                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, sess, gamma, v1)
+                    episode_buffer = []
+                    sess.run(self.update_local_ops)
+                if d:
+                    break
+
+            self.episode_rewards.append(episode_reward)
+            self.episode_lengths.append(episode_step_count)
+            self.episode_mean_values.append(np.mean(episode_values))
+
+            if len(episode_buffer) != 0:
+                v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, sess, gamma, 0.0)
+
+            if episode_count % 5 == 0 and episode_step_count != 0:
+                if episode_count % 250 == 0 and self.name == 'worker_0':
+                    saver.save(sess, self.model_path+'model-'+str(episode_count)+'.cptk')
+                    print('Model saved.')
+
+                mean_reward = np.mean(self.episode_rewards[-5:])
+                mean_length = np.mean(self.episode_lengths[-5:])
+                mean_value = np.mean(self.episode_mean_values[-5:])
+                summary = tf.Summary()
+                summary.value.add(tag='Perf/Reward', simple_value=float(mean_reward))
+                summary.value.add(tag='Perf/Length', simple_value=float(mean_length))
+                summary.value.add(tag='Perf/Value', simple_value=float(mean_value))
+                summary.value.add(tag='Losses/Value Loss', simple_value=float(v_l))
+                summary.value.add(tag='Losses/Policy Loss', simple_value=float(p_l))
+                summary.value.add(tag='Losses/Entropy', simple_value=float(e_l))
+                summary.value.add(tag='Losses/Grad Norm', simple_value=float(g_n))
+                summary.value.add(tag='Var Norm', simple_value=float(v_n))
+                self.summary_writer.add_summary(summary, episode_count)
+
+                self.summary_writer.flush()
+            if self.name == 'worker_0':
+                sess.run(self.increment)
+            episode_count += 1
+
 
 
 
