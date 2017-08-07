@@ -29,11 +29,9 @@ def discount(x, gamma):
 
 
 class ACNetwork:
-    def __init__(self, scope, trainer):
+    def __init__(self, action_space_size, state_space_size, scope, trainer, ):
 
-        action_space_size = 3
-
-        self.inputs = tf.placeholder(shape=[None, 84, 84, 3], dtype=tf.float32)  # grayscale or RGB?
+        self.inputs = tf.placeholder(shape=[None]+state_space_size, dtype=tf.float32)  # grayscale or RGB?
         self.conv1 = slim.conv2d(inputs=self.inputs,
                                  num_outputs=16,
                                  kernel_size=[8, 8],
@@ -156,88 +154,89 @@ class Worker:
         total_steps = 0
         print('Starting worker ' + str(self.number))
         with sess.as_default(), sess.graph.as_default():
-            sess.run(self.update_local_ops)
-            episode_buffer = []
-            episode_values = []
-            episode_frames = []
-            episode_reward = 0
-            episode_step_count = 0
-            d = False
+            while not coord.should_stop():
+                sess.run(self.update_local_ops)
+                episode_buffer = []
+                episode_values = []
+                episode_frames = []
+                episode_reward = 0
+                episode_step_count = 0
+                d = False
 
-            self.env.new_episode()
-            s = self.env.get_state().screen_buffer
-            episode_frames.append(s)
-            # s = process_frame(s)
-            rnn_state = self.local_AC.state_init
+                self.env.new_episode()
+                s = self.env.get_state().screen_buffer
+                episode_frames.append(s)
+                # s = process_frame(s)
+                rnn_state = self.local_AC.state_init
 
-            while self.env.is_episode_finished() is False:
-                a_dist, v, rnn_state = sess.run([self.local_AC.policy,
-                                                 self.local_AC.value,
-                                                 self.local_AC.state_out],
-                                                feed_dict={self.local_AC.inputs: [s],
-                                                           self.local_AC.state_in[0]: rnn_state[0],
-                                                           self.local_AC.state_in[1]: rnn_state[1]})
-                a = np.random.choice(a_dist[0], p=a_dist[0])
-                a = np.argmax(a_dist == a)
+                while self.env.is_episode_finished() is False:
+                    a_dist, v, rnn_state = sess.run([self.local_AC.policy,
+                                                     self.local_AC.value,
+                                                     self.local_AC.state_out],
+                                                    feed_dict={self.local_AC.inputs: [s],
+                                                               self.local_AC.state_in[0]: rnn_state[0],
+                                                               self.local_AC.state_in[1]: rnn_state[1]})
+                    a = np.random.choice(a_dist[0], p=a_dist[0])
+                    a = np.argmax(a_dist == a)
 
-                r = self.env.action(self.actions[a])
-                d = self.env.is_episode_finished()
-                if d is False:
-                    s1 = self.env.get_state().screen_buffer
-                    episode_frames.append(s1)
-                    # s1 = process_frame(s1)
-                else:
-                    s1 = s
+                    r = self.env.action(self.actions[a])
+                    d = self.env.is_episode_finished()
+                    if d is False:
+                        s1 = self.env.get_state().screen_buffer
+                        episode_frames.append(s1)
+                        # s1 = process_frame(s1)
+                    else:
+                        s1 = s
 
-                episode_buffer.append([s, a, r, s1, d, v[0, 0]])
-                episode_values.append(v[0, 0])
+                    episode_buffer.append([s, a, r, s1, d, v[0, 0]])
+                    episode_values.append(v[0, 0])
 
-                episode_reward += r
-                s = s1
-                total_steps += 1
-                episode_step_count += 1
+                    episode_reward += r
+                    s = s1
+                    total_steps += 1
+                    episode_step_count += 1
 
-                if (len(episode_buffer) == 30 and d is not True) and (episode_step_count != max_episode_length-1):
-                    v1 = sess.run(self.local_AC.value,
-                                  feed_dict={self.local_AC.inputs: [s],
-                                             self.local_AC.state_in[0]: rnn_state[0],
-                                             self.local_AC.state_in[1]: rnn_state[1]})
-                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, sess, gamma, v1)
-                    episode_buffer = []
-                    sess.run(self.update_local_ops)
-                if d:
-                    break
+                    if (len(episode_buffer) == 30 and d is not True) and (episode_step_count != max_episode_length-1):
+                        v1 = sess.run(self.local_AC.value,
+                                      feed_dict={self.local_AC.inputs: [s],
+                                                 self.local_AC.state_in[0]: rnn_state[0],
+                                                 self.local_AC.state_in[1]: rnn_state[1]})
+                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, sess, gamma, v1)
+                        episode_buffer = []
+                        sess.run(self.update_local_ops)
+                    if d:
+                        break
 
-            self.episode_rewards.append(episode_reward)
-            self.episode_lengths.append(episode_step_count)
-            self.episode_mean_values.append(np.mean(episode_values))
+                self.episode_rewards.append(episode_reward)
+                self.episode_lengths.append(episode_step_count)
+                self.episode_mean_values.append(np.mean(episode_values))
 
-            if len(episode_buffer) != 0:
-                v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, sess, gamma, 0.0)
+                if len(episode_buffer) != 0:
+                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, sess, gamma)
 
-            if episode_count % 5 == 0 and episode_step_count != 0:
-                if episode_count % 250 == 0 and self.name == 'worker_0':
-                    saver.save(sess, self.model_path+'model-'+str(episode_count)+'.cptk')
-                    print('Model saved.')
+                if episode_count % 5 == 0 and episode_step_count != 0:
+                    if episode_count % 250 == 0 and self.name == 'worker_0':
+                        saver.save(sess, self.model_path+'model-'+str(episode_count)+'.cptk')
+                        print('Model saved.')
 
-                mean_reward = np.mean(self.episode_rewards[-5:])
-                mean_length = np.mean(self.episode_lengths[-5:])
-                mean_value = np.mean(self.episode_mean_values[-5:])
-                summary = tf.Summary()
-                summary.value.add(tag='Perf/Reward', simple_value=float(mean_reward))
-                summary.value.add(tag='Perf/Length', simple_value=float(mean_length))
-                summary.value.add(tag='Perf/Value', simple_value=float(mean_value))
-                summary.value.add(tag='Losses/Value Loss', simple_value=float(v_l))
-                summary.value.add(tag='Losses/Policy Loss', simple_value=float(p_l))
-                summary.value.add(tag='Losses/Entropy', simple_value=float(e_l))
-                summary.value.add(tag='Losses/Grad Norm', simple_value=float(g_n))
-                summary.value.add(tag='Var Norm', simple_value=float(v_n))
-                self.summary_writer.add_summary(summary, episode_count)
+                    mean_reward = np.mean(self.episode_rewards[-5:])
+                    mean_length = np.mean(self.episode_lengths[-5:])
+                    mean_value = np.mean(self.episode_mean_values[-5:])
+                    summary = tf.Summary()
+                    summary.value.add(tag='Perf/Reward', simple_value=float(mean_reward))
+                    summary.value.add(tag='Perf/Length', simple_value=float(mean_length))
+                    summary.value.add(tag='Perf/Value', simple_value=float(mean_value))
+                    summary.value.add(tag='Losses/Value Loss', simple_value=float(v_l))
+                    summary.value.add(tag='Losses/Policy Loss', simple_value=float(p_l))
+                    summary.value.add(tag='Losses/Entropy', simple_value=float(e_l))
+                    summary.value.add(tag='Losses/Grad Norm', simple_value=float(g_n))
+                    summary.value.add(tag='Var Norm', simple_value=float(v_n))
+                    self.summary_writer.add_summary(summary, episode_count)
 
-                self.summary_writer.flush()
-            if self.name == 'worker_0':
-                sess.run(self.increment)
-            episode_count += 1
+                    self.summary_writer.flush()
+                if self.name == 'worker_0':
+                    sess.run(self.increment)
+                episode_count += 1
 
 
 
