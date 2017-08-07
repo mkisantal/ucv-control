@@ -21,8 +21,9 @@ class Commander:
 
         # Agent actions
         self.action_space = ('left', 'right', 'forward', 'backward')
+        self.state_space_size = [84, 84, 3]  # for now RGB
 
-        self.is_episode_finished = False
+        self.episode_finished = False
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
@@ -88,7 +89,7 @@ class Commander:
 
         return loc, rot
 
-    def move(self, loc_cmd=(0.0, 0.0, 0.0), rot_cmd=(0.0, 0.0, 0.0)):
+    def move(self, loc_cmd=0.0, rot_cmd=(0.0, 0.0, 0.0)):
         loc, rot = self.get_pos()
         new_rot = [sum(x) for x in zip(rot, rot_cmd)]
         displacement = [loc_cmd * math.cos(math.radians(rot[1])), loc_cmd * math.sin(math.radians(rot[1])), 0.0]
@@ -109,7 +110,7 @@ class Commander:
 
         reward = self.calculate_reward(displacement=displacement, collision=collision)
         if collision:
-            self.is_episode_finished = True
+            self.episode_finished = True
         return reward
 
     def calculate_reward(self, displacement, collision=False):
@@ -150,8 +151,8 @@ class Commander:
     def new_episode(self):
         # simple respawn: just turn around
         self.move(rot_cmd=(0.0, 180.0, 0.0))
-        self.is_episode_finished = False
+        self.episode_finished = False
         return
 
     def is_episode_finished(self):
-        return self.is_episode_finished
+        return self.episode_finished
