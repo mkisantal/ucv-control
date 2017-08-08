@@ -110,7 +110,7 @@ class Worker:
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
-        self.summary_writer = tf.summary.FileWriter('train' + str(self.number))
+        self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
 
         self.local_AC = ACNetwork(len(game.action_space), game.state_space_size, self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)
@@ -237,7 +237,7 @@ class Worker:
                     self.summary_writer.flush()
                 if self.name == 'worker_0':
                     sess.run(self.increment)
-                    if self.global_episodes > 10:   # TODO: max global episodes to hyperparameter
+                    if episode_count > 10:   # TODO: max global episodes to hyperparameter
                         coord.request_stop()
                 episode_count += 1
 
