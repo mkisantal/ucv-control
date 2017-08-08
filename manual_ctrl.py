@@ -33,6 +33,9 @@ class ManualController:
         if key == KeyCode.from_char("g"):
             self.cmd.get_observation(grayscale=True, show=True)
 
+        if key == KeyCode.from_char("r"):
+            self.cmd.new_episode()
+
         # self.plotter.render()
 
     @staticmethod
