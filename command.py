@@ -106,7 +106,7 @@ class Commander:
                 collision = True
                 new_loc = [float(v) for v in res.split(' ')]
 
-            self.trajectory.append(dict(location=new_loc, rotation=new_rot))
+        self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
         reward = self.calculate_reward(displacement=displacement, collision=collision)
         if collision:
@@ -114,9 +114,11 @@ class Commander:
         return reward
 
     def calculate_reward(self, displacement, collision=False):
-
-        norm_displacement = np.array(displacement) / np.linalg.norm(np.array(displacement))
-        reward = np.dot(np.array(self.goal_vector), norm_displacement) * self.goal_direction_reward
+        reward = 0
+        distance = np.linalg.norm(np.array(displacement))
+        if distance != 0:
+            norm_displacement = np.array(displacement) / distance
+            reward += np.dot(np.array(self.goal_vector), norm_displacement) * self.goal_direction_reward
         if collision:
             reward += self.crash_reward
 
