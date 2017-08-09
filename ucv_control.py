@@ -25,7 +25,7 @@ if ManualControlEnabled:
     client = unrealcv.Client((HOST, PORT))
     client.connect()
 
-    cmd = Commander(client, goal_heading_deg=90)
+    cmd = Commander(client)
     manual = ManualController(cmd)
 
     with Listener(on_press=manual.on_press, on_release=manual.on_release) as listener:

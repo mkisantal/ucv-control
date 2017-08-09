@@ -3,16 +3,17 @@ import math
 import numpy as np
 import StringIO
 import PIL.Image
+from random import randint
 
 
 class Commander:
 
-    def __init__(self, client, goal_heading_deg):
+    def __init__(self, client):
         self.client = client
         self.trajectory = []
 
         # navigation goal direction
-        self.goal_heading = goal_heading_deg
+        self.goal_heading = 0
         self.goal_vector = [math.cos(math.radians(self.goal_heading)), math.sin(math.radians(self.goal_heading)), 0.0]
 
         # RL rewards
@@ -151,8 +152,9 @@ class Commander:
         return observation
 
     def new_episode(self):
-        # simple respawn: just turn around
-        self.move(rot_cmd=(0.0, 180.0, 0.0))
+        # simple respawn: just turn around 180+/-60 deg
+        self.move(rot_cmd=(0.0, randint(120, 240), 0.0))
+        self.goal_heading = randint(0, 360)
         self.episode_finished = False
         return
 
