@@ -13,19 +13,15 @@ import subprocess
 # setup
 ManualControlEnabled = True
 (HOST, PORT) = ('localhost', 9000)
-sim_dir = '/home/mate/Documents/ucv-pkg/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
+sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
 
 
 if ManualControlEnabled:
     ucv_utils.set_port(PORT, sim_dir)
     print('Starting simulator instance.')
-    subprocess.Popen(sim_dir + 'unrealCVfirst-Linux-Shipping')
-    sleep(5)
-    print('Client connecting...')
     client = unrealcv.Client((HOST, PORT))
-    client.connect()
-
-    cmd = Commander(client)
+    sim = ucv_utils.start_sim(sim_dir, client)
+    cmd = Commander(client, sim_dir, sim)
     manual = ManualController(cmd)
 
     with Listener(on_press=manual.on_press, on_release=manual.on_release) as listener:
@@ -45,20 +41,15 @@ else:
     num_workers = 4
     cmd = []
     clients = []
-    # start simulation instances
+    sims = []
+    # starting simulation instances
     for i in range(num_workers):
 
         ucv_utils.set_port(PORT+i, sim_dir)
-
-        print('Starting simulator instance {}'.format(i))
-        subprocess.Popen(sim_dir + 'unrealCVfirst-Linux-Shipping')
-        sleep(5)
-
-        print('connecting client instance...')
         clients.append(unrealcv.Client((HOST, PORT+i)))
-        clients[i].connect()
-
-        cmd.append(Commander(clients[i], goal_heading_deg=90))
+        print('Starting simulator instance {}'.format(i))
+        sims.append(ucv_utils.start_sim(sim_dir, clients[i]))
+        cmd.append(Commander(clients[i], sim_dir, sims[i]))
 
     if not os.path.exists(model_path):
         os.makedirs(model_path)

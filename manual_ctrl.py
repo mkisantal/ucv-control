@@ -38,8 +38,8 @@ class ManualController:
 
         # self.plotter.render()
 
-    @staticmethod
-    def on_release(key):
+    def on_release(self, key):
         if key == Key.esc:
             # Stop listener
+            self.cmd.terminate_sim()
             return False

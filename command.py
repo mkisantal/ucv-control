@@ -4,11 +4,14 @@ import numpy as np
 import StringIO
 import PIL.Image
 from random import randint
+from time import sleep
+import subprocess
+import ucv_utils
 
 
 class Commander:
 
-    def __init__(self, client):
+    def __init__(self, client, sim_dir, sim):
         self.client = client
         self.trajectory = []
 
@@ -25,6 +28,9 @@ class Commander:
         self.state_space_size = [84, 84, 3]  # for now RGB
 
         self.episode_finished = False
+        self.sim_dir = sim_dir
+
+        self.sim = sim
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
@@ -99,13 +105,22 @@ class Commander:
 
         if rot_cmd != (0.0, 0.0, 0.0):
             res = self.client.request('vset /camera/0/rotation {} {} {}'.format(*new_rot))
-            assert res == 'ok', 'Fail to set camera rotation'
+            if res != 'ok':
+                if res is None:
+                    print ('Simulator restart required.')
+                    self.restart_sim()
+                    self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
         if loc_cmd != 0.0:
             res = self.client.request('vset /camera/0/moveto {} {} {}'.format(*new_loc))
             if res != 'ok':
-                print('Collision. Failed to move to position.')
-                collision = True
-                new_loc = [float(v) for v in res.split(' ')]
+                if res is None:
+                    print ('Simulator restart required.')
+                    self.restart_sim()
+                    self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                else:
+                    print('Collision. Failed to move to position.')
+                    collision = True
+                    new_loc = [float(v) for v in res.split(' ')]
 
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
@@ -123,7 +138,7 @@ class Commander:
         if collision:
             reward += self.crash_reward
 
-        print('reward: {}'.format(reward))
+        # print('reward: {}'.format(reward))
 
         return reward
 
@@ -160,3 +175,14 @@ class Commander:
 
     def is_episode_finished(self):
         return self.episode_finished
+
+    def terminate_sim(self):
+        self.sim.terminate()
+
+    def restart_sim(self):
+        self.client.disconnect()
+        self.sim.terminate()
+        sleep(2)
+        port = self.client.message_client.endpoint[1]
+        ucv_utils.set_port(port, self.sim_dir)
+        self.sim = ucv_utils.start_sim(self.sim_dir, self.client)
