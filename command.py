@@ -109,14 +109,14 @@ class Commander:
                 if res is None:
                     print ('Simulator restart required.')
                     self.restart_sim()
-                    self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                    return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
         if loc_cmd != 0.0:
             res = self.client.request('vset /camera/0/moveto {} {} {}'.format(*new_loc))
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
                     self.restart_sim()
-                    self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                    return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
                 else:
                     print('Collision. Failed to move to position.')
                     collision = True
@@ -153,7 +153,11 @@ class Commander:
 
     def get_observation(self, grayscale=False, show=False):
         res = self.client.request('vget /camera/0/lit png')
-        rgba = self._read_png(res)
+        try:
+            rgba = self._read_png(res)
+        except IOError:
+            self.restart_sim()
+            return self.get_observation(grayscale=grayscale, show=show)
         rgb = rgba[:, :, :3]
         if grayscale is True:
             observation = np.mean(rgb, 2)
