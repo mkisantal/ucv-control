@@ -2,6 +2,7 @@ import fileinput
 import re
 import subprocess
 from time import sleep
+from random import randint
 
 
 def set_port(port, sim_dir):
@@ -13,8 +14,15 @@ def set_port(port, sim_dir):
 
 def start_sim(sim_dir, client):
     got_connection = False
-
+    attempt = 1
     while not got_connection:
+        if attempt > 2:
+            wait_time = 20 + randint(5, 20)  # rand to avoid too many parallel sim startups
+            print('Multiple start attempts failed. Trying again in {} seconds.'.format(wait_time))
+            sleep(wait_time)
+            attempt = 1
+        print('Connection attempt: {}'.format(attempt))
+        attempt += 1
         sim = subprocess.Popen(sim_dir + 'unrealCVfirst-Linux-Shipping')
         sleep(5)
         client.connect()
