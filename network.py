@@ -101,7 +101,7 @@ class ACNetwork:
 
 class Worker:
     def __init__(self, name, model_path, trainer, global_episodes, game):
-        self.name = 'worker' + str(name)
+        self.name = 'worker_' + str(name)
         self.number = name
         self.model_path = model_path
         self.trainer = trainer
@@ -218,7 +218,6 @@ class Worker:
                 if episode_count % 5 == 0 and episode_step_count != 0:
                     if episode_count % 250 == 0 and self.name == 'worker_0':
                         saver.save(sess, self.model_path+'model-'+str(episode_count)+'.cptk')
-                        print('Model saved.')
 
                     mean_reward = np.mean(self.episode_rewards[-5:])
                     mean_length = np.mean(self.episode_lengths[-5:])
@@ -240,7 +239,4 @@ class Worker:
                     if episode_count > 10:   # TODO: max global episodes to hyperparameter
                         coord.request_stop()
                 episode_count += 1
-
-
-
-
+                print(episode_count)
