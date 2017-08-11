@@ -11,7 +11,7 @@ from time import sleep
 import subprocess
 
 # setup
-ManualControlEnabled = True
+ManualControlEnabled = False
 (HOST, PORT) = ('localhost', 9000)
 sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
 
@@ -82,4 +82,6 @@ else:
             t.start()
             sleep(0.5)
             worker_threads.append(t)
+        while not coord.should_stop():
+            sleep(0.1)
         coord.join(worker_threads)
