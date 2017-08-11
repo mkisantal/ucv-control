@@ -118,7 +118,6 @@ class Commander:
                     self.restart_sim()
                     return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
                 else:
-                    print('Collision. Failed to move to position.')
                     collision = True
                     new_loc = [float(v) for v in res.split(' ')]
 
