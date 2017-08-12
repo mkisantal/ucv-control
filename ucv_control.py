@@ -1,7 +1,7 @@
 import unrealcv
-from manual_ctrl import ManualController
+# from manual_ctrl import ManualController
 import ucv_utils
-from pynput.keyboard import Listener
+# from pynput.keyboard import Listener
 from command import Commander
 import network as net
 import tensorflow as tf
@@ -17,15 +17,16 @@ sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Li
 
 
 if ManualControlEnabled:
-    ucv_utils.set_port(PORT, sim_dir)
-    print('Starting simulator instance.')
-    client = unrealcv.Client((HOST, PORT))
-    sim = ucv_utils.start_sim(sim_dir, client)
-    cmd = Commander(client, sim_dir, sim)
-    manual = ManualController(cmd)
-
-    with Listener(on_press=manual.on_press, on_release=manual.on_release) as listener:
-        listener.join()
+    #  ucv_utils.set_port(PORT, sim_dir)
+    # print('Starting simulator instance.')
+    # client = unrealcv.Client((HOST, PORT))
+    # sim = ucv_utils.start_sim(sim_dir, client)
+    # cmd = Commander(client, sim_dir, sim)
+    # manual = ManualController(cmd)
+    #
+    # with Listener(on_press=manual.on_press, on_release=manual.on_release) as listener:
+    #     listener.join()
+    print('Manual control is not supported on server.')
 
 else:
     # do RL training
