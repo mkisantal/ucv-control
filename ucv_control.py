@@ -86,3 +86,6 @@ else:
         while not coord.should_stop():
             sleep(0.1)
         coord.join(worker_threads)
+
+    for sim in sims:
+        sim.terminate()
