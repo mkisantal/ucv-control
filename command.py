@@ -104,14 +104,14 @@ class Commander:
         collision = False
 
         if rot_cmd != (0.0, 0.0, 0.0):
-            res = self.client.request('vset /camera/0/rotation {} {} {}'.format(*new_rot))
+            res = self.client.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
                     self.restart_sim()
                     return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
         if loc_cmd != 0.0:
-            res = self.client.request('vset /camera/0/moveto {} {} {}'.format(*new_loc))
+            res = self.client.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
