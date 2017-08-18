@@ -19,7 +19,8 @@ def set_port(port, sim_dir):
 def start_sim(sim_dir, client):
     got_connection = False
     attempt = 1
-    while not got_connection:
+    # while not got_connection:
+    for i in range(10):
         if attempt > 2:
             wait_time = 20 + randint(5, 20)  # rand to avoid too many parallel sim startups
             print('Multiple start attempts failed. Trying again in {} seconds.'.format(wait_time))
@@ -37,3 +38,4 @@ def start_sim(sim_dir, client):
             sleep(3)
         else:
             return sim
+    return

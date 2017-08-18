@@ -84,7 +84,13 @@ else:
             sleep(0.5)
             worker_threads.append(t)
         while not coord.should_stop():
-            sleep(0.1)
+            try:
+                sleep(0.1)
+            except KeyboardInterrupt:
+                print('terminating threads.....')
+                coord.request_stop()
+                for commander in cmd:
+                    commander.should_terminate = True
         coord.join(worker_threads)
 
     for sim in sims:

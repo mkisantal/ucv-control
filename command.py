@@ -32,6 +32,8 @@ class Commander:
 
         self.sim = sim
 
+        self.should_terminate = False
+
     def action(self, cmd):
         angle = 20.0  # degrees/step
         speed = 20.0  # cm/step
@@ -108,15 +110,19 @@ class Commander:
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
-                    self.restart_sim()
-                    return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                    if self.restart_sim():
+                        return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                    else:
+                        return 0
         if loc_cmd != 0.0:
             res = self.client.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
-                    self.restart_sim()
-                    return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                    if self.restart_sim():
+                        return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
+                    else:
+                        return 0
                 else:
                     collision = True
                     new_loc = [float(v) for v in res.split(' ')]
@@ -185,7 +191,10 @@ class Commander:
     def restart_sim(self):
         self.client.disconnect()
         self.sim.terminate()
-        sleep(2)
-        port = self.client.message_client.endpoint[1]
-        ucv_utils.set_port(port, self.sim_dir)
-        self.sim = ucv_utils.start_sim(self.sim_dir, self.client)
+        if not self.should_terminate:
+            sleep(2)
+            port = self.client.message_client.endpoint[1]
+            ucv_utils.set_port(port, self.sim_dir)
+            self.sim = ucv_utils.start_sim(self.sim_dir, self.client)
+            return True
+        return False
