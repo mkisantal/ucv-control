@@ -195,6 +195,6 @@ class Commander:
             sleep(2)
             port = self.client.message_client.endpoint[1]
             ucv_utils.set_port(port, self.sim_dir)
-            self.sim = ucv_utils.start_sim(self.sim_dir, self.client)
+            self.sim = ucv_utils.start_sim(self.sim_dir, self.client, self)
             return True
         return False

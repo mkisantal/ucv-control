@@ -50,7 +50,7 @@ else:
         ucv_utils.set_port(PORT+i, sim_dir)
         clients.append(unrealcv.Client((HOST, PORT+i)))
         print('Starting simulator instance {}'.format(i))
-        sims.append(ucv_utils.start_sim(sim_dir, clients[i]))
+        sims.append(ucv_utils.start_sim(sim_dir, clients[i], None))
         cmd.append(Commander(clients[i], sim_dir, sims[i]))
 
     if not os.path.exists(model_path):

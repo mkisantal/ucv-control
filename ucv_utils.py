@@ -16,11 +16,14 @@ def set_port(port, sim_dir):
         print line,
 
 
-def start_sim(sim_dir, client):
+def start_sim(sim_dir, client, cmd):
     got_connection = False
     attempt = 1
-    # while not got_connection:
-    for i in range(10):
+    while not got_connection:
+        # for i in range(10):
+        if cmd is not None:
+            if cmd.should_terminate:
+                return
         if attempt > 2:
             wait_time = 20 + randint(5, 20)  # rand to avoid too many parallel sim startups
             print('Multiple start attempts failed. Trying again in {} seconds.'.format(wait_time))
@@ -29,7 +32,7 @@ def start_sim(sim_dir, client):
         print('Connection attempt: {}'.format(attempt))
         attempt += 1
         sim = subprocess.Popen(sim_dir + 'unrealCVfirst-Linux-Shipping')
-        sleep(5)
+        sleep(10)
         client.connect()
         sleep(2)
         got_connection = client.isconnected()
@@ -38,4 +41,3 @@ def start_sim(sim_dir, client):
             sleep(3)
         else:
             return sim
-    return
