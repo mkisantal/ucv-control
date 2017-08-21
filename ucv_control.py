@@ -1,4 +1,3 @@
-import unrealcv
 # from manual_ctrl import ManualController
 import ucv_utils
 # from pynput.keyboard import Listener
@@ -9,6 +8,8 @@ import os
 import threading
 from time import sleep
 import subprocess
+import unrealcv
+
 
 # setup
 ManualControlEnabled = False
