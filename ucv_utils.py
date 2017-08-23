@@ -3,6 +3,7 @@ import re
 import subprocess
 from time import sleep
 from random import randint
+import os
 
 
 def set_port(port, sim_dir):
@@ -31,7 +32,8 @@ def start_sim(sim_dir, client, cmd):
             attempt = 1
         print('Connection attempt: {}'.format(attempt))
         attempt += 1
-        sim = subprocess.Popen(sim_dir + 'unrealCVfirst-Linux-Shipping')
+        with open(os.devnull, 'w') as fp:
+            sim = subprocess.Popen(sim_dir + 'RealisticRendering', stdout=fp)
         sleep(10)
         client.connect()
         sleep(2)
