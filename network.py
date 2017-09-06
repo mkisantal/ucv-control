@@ -11,10 +11,6 @@ import time
 import ucv_utils
 from random import randint
 
-(HOST, PORT) = ('localhost', 9000)
-sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
-sim_name = 'unrealCVfirst-Linux-Shipping'
-
 
 def normalized_columns_initializer(std=1.0):
     def _initializer(shape, dtype=None, partition_info=None):
@@ -125,12 +121,7 @@ class Worker:
         self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
 
         # restructuring
-        self.client = Client((HOST, PORT + self.number))
-        self.sim = None
-        self.env = Commander(self.client, sim_dir, self.sim)
-        self.should_stop = False
-
-        self.start_sim()
+        self.env = Commander(self.number)
 
         self.local_AC = ACNetwork(len(self.env.action_space), self.env.state_space_size, self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)
@@ -138,46 +129,6 @@ class Worker:
         # setting up game here
         # self.env = Commander(self.client, sim_dir, self.sim)  # UnrealCV controller
         self.actions = self.env.action_space
-
-    def shut_down(self):
-        if self.client.isconnected():
-            self.client.disconnect()
-        if self.sim is not None:
-            self.sim.terminate()
-            self.sim = None
-
-    def start_sim(self, restart=False):
-        # disconnect and terminate if restarting
-        attempt = 1
-        got_connection = False
-        while not got_connection and not self.should_stop:
-            self.shut_down()
-            print('Connection attempt: {}'.format(attempt))
-            with open(os.devnull, 'w') as fp:
-                self.sim = subprocess.Popen(sim_dir + sim_name, stdout=fp)
-            attempt += 1
-            time.sleep(10)
-            port = self.client.message_client.endpoint[1]
-            ucv_utils.set_port(port, sim_dir)
-            self.client.connect()
-            time.sleep(2)
-            got_connection = self.client.isconnected()
-            if got_connection:
-                if restart:
-                    try:
-                        self.env.reset_agent()
-                    except TypeError:
-                        got_connection = False
-            else:
-                if attempt > 2:
-                    wait_time = 20 + randint(5, 20)  # rand to avoid too many parallel sim startups
-                    print('Multiple start attempts failed. Trying again in {} seconds.'.format(wait_time))
-                    waited = 0
-                    while not self.should_stop and (waited < wait_time):
-                        time.sleep(1)
-                        waited += 1
-                    attempt = 1
-        return
 
     def train(self, rollout, bootstrap_value, gamma, sess):
         rollout = np.array(rollout)
@@ -225,10 +176,7 @@ class Worker:
                 d = False
 
                 self.env.new_episode()
-                try:
-                    s = self.env.get_observation()  # TODO: repeat failed action?
-                except IOError:
-                    self.start_sim(restart=True)
+                s = self.env.get_observation()
                 episode_frames.append(s)
                 # s = process_frame(s)
                 rnn_state = self.local_AC.state_init
@@ -243,16 +191,10 @@ class Worker:
                     a = np.random.choice(a_dist[0], p=a_dist[0])
                     a = np.argmax(a_dist == a)
 
-                    try:
-                        r = self.env.action(self.actions[a])
-                    except TypeError:
-                        self.start_sim(restart=True)  # TODO: repeat failed action?
+                    r = self.env.action(self.actions[a])
                     d = self.env.is_episode_finished()
                     if d is False:
-                        try:
-                            s1 = self.env.get_observation()
-                        except IOError:
-                            self.start_sim(restart=True)  # TODO: repeat failed action?
+                        s1 = self.env.get_observation()
                         episode_frames.append(s1)
                         # s1 = process_frame(s1)
                     else:
@@ -311,5 +253,5 @@ class Worker:
 
             # shutting down client and sim
             print('Shutting down {}...    '.format(self.name))
-            self.shut_down()
+            self.env.shut_down()
             print('       Sim and client closed.')

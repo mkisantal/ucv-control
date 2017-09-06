@@ -4,16 +4,21 @@ import numpy as np
 import StringIO
 import PIL.Image
 from random import randint
-from time import sleep
+import time
 import subprocess
 import ucv_utils
 import exceptions
+from unrealcv import Client
+import os
+
+(HOST, PORT) = ('localhost', 9000)
+sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
+sim_name = 'unrealCVfirst-Linux-Shipping'
 
 
 class Commander:
 
-    def __init__(self, client, sim_dir, sim):
-        self.client = client
+    def __init__(self, number):
         self.trajectory = []
 
         # navigation goal direction
@@ -30,6 +35,52 @@ class Commander:
 
         self.episode_finished = False
         self.should_terminate = False
+
+        self.sim = None
+        self.client = Client((HOST, PORT + number))
+        self.should_stop = False
+
+        self.start_sim()
+
+    def shut_down(self):
+        if self.client.isconnected():
+            self.client.disconnect()
+        if self.sim is not None:
+            self.sim.terminate()
+            self.sim = None
+
+    def start_sim(self, restart=False):
+        # disconnect and terminate if restarting
+        attempt = 1
+        got_connection = False
+        while not got_connection and not self.should_stop:
+            self.shut_down()
+            print('Connection attempt: {}'.format(attempt))
+            with open(os.devnull, 'w') as fp:
+                self.sim = subprocess.Popen(sim_dir + sim_name, stdout=fp)
+            attempt += 1
+            time.sleep(10)
+            port = self.client.message_client.endpoint[1]
+            ucv_utils.set_port(port, sim_dir)
+            self.client.connect()
+            time.sleep(2)
+            got_connection = self.client.isconnected()
+            if got_connection:
+                if restart:
+                    try:
+                        self.reset_agent()
+                    except TypeError:
+                        got_connection = False
+            else:
+                if attempt > 2:
+                    wait_time = 20 + randint(5, 20)  # rand to avoid too many parallel sim startups
+                    print('Multiple start attempts failed. Trying again in {} seconds.'.format(wait_time))
+                    waited = 0
+                    while not self.should_stop and (waited < wait_time):
+                        time.sleep(1)
+                        waited += 1
+                    attempt = 1
+        return
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
@@ -64,26 +115,26 @@ class Commander:
         return
 
     def save_view(self):
-        res = self.client.request('vget /viewmode')
-        res2 = self.client.request('vget /camera/0/' + res)
+        res = self.request('vget /viewmode')
+        res2 = self.request('vget /camera/0/' + res)
         print(res2)
         return
 
     def change_view(self, viewmode=''):
         if viewmode == '':
             switch = dict(lit='normal', normal='depth', depth='object_mask', object_mask='lit')
-            res = self.client.request('vget /viewmode')
-            res2 = self.client.request('vset /viewmode ' + switch[res])
+            res = self.request('vget /viewmode')
+            res2 = self.request('vset /viewmode ' + switch[res])
             # print(res2)
         elif viewmode in {'lit', 'normal', 'depth', 'object_mask'}:
-            res2 = self.client.request('vset /viewmode ' + viewmode)
+            res2 = self.request('vset /viewmode ' + viewmode)
         return
 
     def get_pos(self, print_pos=False):
 
         if len(self.trajectory) == 0:
-            rot = [float(v) for v in self.client.request('vget /camera/0/rotation').split(' ')]
-            loc = [float(v) for v in self.client.request('vget /camera/0/location').split(' ')]
+            rot = [float(v) for v in self.request('vget /camera/0/rotation').split(' ')]
+            loc = [float(v) for v in self.request('vget /camera/0/location').split(' ')]
             self.trajectory.append(dict(location=loc, rotation=rot))
         else:
             loc = self.trajectory[-1]["location"]
@@ -98,14 +149,24 @@ class Commander:
     def reset_agent(self):
         new_loc = self.trajectory[-1]["location"]
         new_rot = self.trajectory[-1]["rotation"]
-        res1 = self.client.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
-        res2 = self.client.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
-
-        if not res1 or not res2:
-
-            raise TypeError
+        res1 = self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
+        assert res1
+        res2 = self.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
+        assert res2
 
         return
+
+    def request(self, message):
+
+        res = self.client.request(message)
+
+        # if res in 'None', try restarting sim
+        while not res:
+            self.start_sim(restart=True)
+            self.reset_agent()
+            res = self.client.request(message)
+
+        return res
 
     def move(self, loc_cmd=0.0, rot_cmd=(0.0, 0.0, 0.0)):
         loc, rot = self.get_pos()
@@ -115,26 +176,18 @@ class Commander:
         collision = False
 
         if rot_cmd != (0.0, 0.0, 0.0):
-            res = self.client.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
-            if res != 'ok':
-                if res is None:
-                    print ('Simulator restart required.')
-                    raise TypeError
+            res = self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
+            assert(res == 'ok')
         if loc_cmd != 0.0:
-            res = self.client.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
+            res = self.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
             if res != 'ok':
-                if res is None:
-                    print ('Simulator restart required.')
-                    raise TypeError
-                else:
-                    collision = True
-                    new_loc = [float(v) for v in res.split(' ')]
+                collision = True
+                new_loc = [float(v) for v in res.split(' ')]
 
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
         reward = self.calculate_reward(displacement=displacement, collision=collision)
-        if collision:
-            self.episode_finished = True
+
         return reward
 
     def calculate_reward(self, displacement, collision=False):
@@ -145,6 +198,7 @@ class Commander:
             reward += np.dot(np.array(self.goal_vector), norm_displacement) * self.goal_direction_reward
         if collision:
             reward += self.crash_reward
+            self.episode_finished = True
 
         # print('reward: {}'.format(reward))
 
@@ -160,7 +214,7 @@ class Commander:
         return np.asarray(img)
 
     def get_observation(self, grayscale=False, show=False):
-        res = self.client.request('vget /camera/0/lit png')
+        res = self.request('vget /camera/0/lit png')
         rgba = self._read_png(res)
         rgb = rgba[:, :, :3]
         if grayscale is True:

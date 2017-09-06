@@ -1,14 +1,10 @@
 # from manual_ctrl import ManualController
-import ucv_utils
 # from pynput.keyboard import Listener
-from command import Commander
 import network as net
 import tensorflow as tf
 import os
 import threading
 from time import sleep
-import subprocess
-import unrealcv
 
 
 # setup
@@ -55,7 +51,7 @@ else:
 
         workers = []
         for i in range(num_workers):
-            workers.append(net.Worker(i, model_path, trainer, global_episodes,))
+            workers.append(net.Worker(i, model_path, trainer, global_episodes))
         saver = tf.train.Saver()
 
     with tf.Session() as sess:
