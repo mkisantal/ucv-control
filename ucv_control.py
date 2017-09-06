@@ -34,24 +34,14 @@ else:
     max_episode_length = 300
     gamma = 0.99
     s_size = 7056
-    a_size = 4
+    s_shape = [84, 84, 3]  # for now RGB
+    a_size = 3
     load_model = False
     model_path = './model'
 
     tf.reset_default_graph()
 
-    num_workers = 4
-    cmd = []
-    clients = []
-    sims = []
-    # starting simulation instances
-    for i in range(num_workers):
-
-        ucv_utils.set_port(PORT+i, sim_dir)
-        clients.append(unrealcv.Client((HOST, PORT+i)))
-        print('Starting simulator instance {}'.format(i))
-        sims.append(ucv_utils.start_sim(sim_dir, clients[i], None))
-        cmd.append(Commander(clients[i], sim_dir, sims[i]))
+    num_workers = 8
 
     if not os.path.exists(model_path):
         os.makedirs(model_path)
@@ -59,13 +49,13 @@ else:
     with tf.device("/cpu:0"):
         global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
         trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
-        master_network = net.ACNetwork(len(cmd[0].action_space), cmd[0].state_space_size, 'global', None)
+        master_network = net.ACNetwork(a_size, s_shape, 'global', None)
 
         # num_workers = multiprocessing.cpu_count()
 
         workers = []
         for i in range(num_workers):
-            workers.append(net.Worker(i, model_path, trainer, global_episodes, cmd[i]))
+            workers.append(net.Worker(i, model_path, trainer, global_episodes,))
         saver = tf.train.Saver()
 
     with tf.Session() as sess:
@@ -90,9 +80,5 @@ else:
             except KeyboardInterrupt:
                 print('terminating threads.....')
                 coord.request_stop()
-                for commander in cmd:
-                    commander.should_terminate = True
         coord.join(worker_threads)
-
-    for sim in sims:
-        sim.terminate()
+    print('Tot ziens')

@@ -7,6 +7,7 @@ from random import randint
 from time import sleep
 import subprocess
 import ucv_utils
+import exceptions
 
 
 class Commander:
@@ -24,14 +25,10 @@ class Commander:
         self.crash_reward = -10.0
 
         # Agent actions
-        self.action_space = ('left', 'right', 'forward', 'backward')
+        self.action_space = ('left', 'right', 'forward')  #  'backward'
         self.state_space_size = [84, 84, 3]  # for now RGB
 
         self.episode_finished = False
-        self.sim_dir = sim_dir
-
-        self.sim = sim
-
         self.should_terminate = False
 
     def action(self, cmd):
@@ -98,6 +95,18 @@ class Commander:
 
         return loc, rot
 
+    def reset_agent(self):
+        new_loc = self.trajectory[-1]["location"]
+        new_rot = self.trajectory[-1]["rotation"]
+        res1 = self.client.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
+        res2 = self.client.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
+
+        if not res1 or not res2:
+
+            raise TypeError
+
+        return
+
     def move(self, loc_cmd=0.0, rot_cmd=(0.0, 0.0, 0.0)):
         loc, rot = self.get_pos()
         new_rot = [sum(x) for x in zip(rot, rot_cmd)]
@@ -110,19 +119,13 @@ class Commander:
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
-                    if self.restart_sim():
-                        return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
-                    else:
-                        return 0
+                    raise TypeError
         if loc_cmd != 0.0:
             res = self.client.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
             if res != 'ok':
                 if res is None:
                     print ('Simulator restart required.')
-                    if self.restart_sim():
-                        return self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # try again recursively
-                    else:
-                        return 0
+                    raise TypeError
                 else:
                     collision = True
                     new_loc = [float(v) for v in res.split(' ')]
@@ -158,11 +161,7 @@ class Commander:
 
     def get_observation(self, grayscale=False, show=False):
         res = self.client.request('vget /camera/0/lit png')
-        try:
-            rgba = self._read_png(res)
-        except IOError:
-            self.restart_sim()
-            return self.get_observation(grayscale=grayscale, show=show)
+        rgba = self._read_png(res)
         rgb = rgba[:, :, :3]
         if grayscale is True:
             observation = np.mean(rgb, 2)
@@ -185,16 +184,3 @@ class Commander:
     def is_episode_finished(self):
         return self.episode_finished
 
-    def terminate_sim(self):
-        self.sim.terminate()
-
-    def restart_sim(self):
-        self.client.disconnect()
-        self.sim.terminate()
-        if not self.should_terminate:
-            sleep(2)
-            port = self.client.message_client.endpoint[1]
-            ucv_utils.set_port(port, self.sim_dir)
-            self.sim = ucv_utils.start_sim(self.sim_dir, self.client, self)
-            return True
-        return False
