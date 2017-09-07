@@ -5,6 +5,7 @@ import tensorflow as tf
 import os
 import threading
 from time import sleep
+from logger import TestLogger
 
 
 # setup
@@ -63,6 +64,9 @@ else:
         else:
             sess.run(tf.global_variables_initializer())
 
+        # start logger
+        logger = TestLogger(workers)
+        threading.Thread(target=lambda: logger.work()).start()
         worker_threads = []
         for worker in workers:
             worker_work = lambda: worker.work(max_episode_length, gamma, sess, coord, saver)
@@ -76,5 +80,6 @@ else:
             except KeyboardInterrupt:
                 print('terminating threads.....')
                 coord.request_stop()
+        logger.should_stop = True
         coord.join(worker_threads)
     print('Tot ziens')
