@@ -10,9 +10,10 @@ import ucv_utils
 import exceptions
 from unrealcv import Client
 import os
+import matplotlib.pyplot as plt
 
 (HOST, PORT) = ('localhost', 9000)
-sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
+sim_dir = '/home/mate/Documents/ucv-pkg3/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
 sim_name = 'unrealCVfirst-Linux-Shipping'
 
 
@@ -55,13 +56,13 @@ class Commander:
         got_connection = False
         while not got_connection and not self.should_stop:
             self.shut_down()
+            port = self.client.message_client.endpoint[1]
+            ucv_utils.set_port(port, sim_dir)
             print('Connection attempt: {}'.format(attempt))
             with open(os.devnull, 'w') as fp:
                 self.sim = subprocess.Popen(sim_dir + sim_name, stdout=fp)
             attempt += 1
             time.sleep(10)
-            port = self.client.message_client.endpoint[1]
-            ucv_utils.set_port(port, sim_dir)
             self.client.connect()
             time.sleep(2)
             got_connection = self.client.isconnected()
@@ -114,14 +115,15 @@ class Commander:
             self.get_pos(print_pos=True)
         return
 
-    def save_view(self):
-        res = self.request('vget /viewmode')
-        res2 = self.request('vget /camera/0/' + res)
+    def save_view(self, viewmode=None):
+        if viewmode is None:
+            viewmode = self.request('vget /viewmode')
+        res2 = self.request('vget /camera/0/' + viewmode)
         print(res2)
         return
 
-    def change_view(self, viewmode=''):
-        if viewmode == '':
+    def change_view(self, viewmode=None):
+        if viewmode is None:
             switch = dict(lit='normal', normal='depth', depth='object_mask', object_mask='lit')
             res = self.request('vget /viewmode')
             res2 = self.request('vset /viewmode ' + switch[res])
@@ -213,20 +215,41 @@ class Commander:
         img = PIL.Image.open(StringIO.StringIO(res))
         return np.asarray(img)
 
-    def get_observation(self, grayscale=False, show=False):
-        res = self.request('vget /camera/0/lit png')
-        rgba = self._read_png(res)
-        rgb = rgba[:, :, :3]
-        if grayscale is True:
-            observation = np.mean(rgb, 2)
+    def get_observation(self, grayscale=False, show=False, viewmode='lit'):
+        if viewmode == 'depth':
+            res = self.request('vget /camera/0/depth npy')
+            depth_image = self._read_npy(res)
+            cropped = self.crop_and_resize(depth_image)
+            observation = self.quantize_depth(cropped)
         else:
-            observation = rgb
+            res = self.request('vget /camera/0/lit png')
+            rgba = self._read_png(res)
+            rgb = rgba[:, :, :3]
+            if grayscale is True:
+                observation = np.mean(rgb, 2)
+            else:
+                observation = rgb
 
         if show:
-            img = PIL.Image.fromarray(observation)
-            img.show()
+            # img = PIL.Image.fromarray(observation)
+            # img.show()
+            plt.imshow(observation)
+            plt.savefig('depth.png')
+            print('plot saved')
 
         return observation
+
+    @staticmethod
+    def quantize_depth(depth_image):    # DEBUG!!!
+        bins = [0, 1, 2, 3, 4, 5, 6, 7]
+        out = np.digitize(depth_image, bins) - np.ones(depth_image.shape, dtype=np.int8)
+        return out
+
+    @staticmethod
+    def crop_and_resize(depth_image):
+        # resize 84x84 to 16x16, crop center 8x16
+        return zoom(depth_image, [0.19, 0.19], order=1)[4:12, :]
+
 
     def new_episode(self):
         # simple respawn: just turn around 180+/-60 deg
