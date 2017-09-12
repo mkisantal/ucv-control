@@ -20,6 +20,7 @@ class Commander:
 
     def __init__(self, number, mode=None):
         self.trajectory = []
+        self.name = 'worker_' + str(number)
 
         # navigation goal direction
         self.goal_heading = 0
@@ -83,6 +84,13 @@ class Commander:
                         time.sleep(1)
                         waited += 1
                     attempt = 1
+        return
+
+    def reconnect(self):
+        print('{} trying to reconnect.'.format(self.name))
+        self.client.disconnect()
+        time.sleep(2)
+        self.client.connect()
         return
 
     def action(self, cmd):
@@ -162,11 +170,11 @@ class Commander:
     def request(self, message):
 
         res = self.client.request(message)
-        if self.mode is 'test':
-            assert (res is not None)
         # if res in 'None', try restarting sim
         while not res:
-            self.start_sim(restart=True)
+            #self.start_sim(restart=True)
+            print('[{}] sim error while trying to request {}'.format(self.name, message))
+            self.reconnect()
             self.reset_agent()
             res = self.client.request(message)
 
@@ -174,7 +182,7 @@ class Commander:
 
     def move(self, loc_cmd=0.0, rot_cmd=(0.0, 0.0, 0.0)):
         loc, rot = self.get_pos()
-        new_rot = [sum(x) for x in zip(rot, rot_cmd)]
+        new_rot = [sum(x) % 360 for x in zip(rot, rot_cmd)]
         displacement = [loc_cmd * math.cos(math.radians(rot[1])), loc_cmd * math.sin(math.radians(rot[1])), 0.0]
         new_loc = [sum(x) for x in zip(loc, displacement)]
         collision = False
