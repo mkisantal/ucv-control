@@ -18,7 +18,7 @@ sim_name = 'unrealCVfirst-Linux-Shipping'
 
 class Commander:
 
-    def __init__(self, number):
+    def __init__(self, number, mode=None):
         self.trajectory = []
 
         # navigation goal direction
@@ -39,8 +39,11 @@ class Commander:
         self.sim = None
         self.client = Client((HOST, PORT + number))
         self.should_stop = False
-
-        self.start_sim()
+        self.mode = mode
+        if self.mode == 'test':
+            self.client.connect()
+        else:
+            self.start_sim()
 
     def shut_down(self):
         if self.client.isconnected():
@@ -159,7 +162,8 @@ class Commander:
     def request(self, message):
 
         res = self.client.request(message)
-
+        if self.mode is 'test':
+            assert (res is not None)
         # if res in 'None', try restarting sim
         while not res:
             self.start_sim(restart=True)
