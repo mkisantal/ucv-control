@@ -216,7 +216,7 @@ class Worker:
                         v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, gamma, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
-                    if d:
+                    if d or (episode_step_count == max_episode_length - 1):
                         break
 
                 self.episode_rewards.append(episode_reward)

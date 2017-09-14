@@ -27,7 +27,7 @@ class Commander:
         self.goal_vector = [math.cos(math.radians(self.goal_heading)), math.sin(math.radians(self.goal_heading)), 0.0]
 
         # RL rewards
-        self.goal_direction_reward = 1.0
+        self.goal_direction_reward = 0.0
         self.crash_reward = -10.0
 
         # Agent actions
@@ -172,7 +172,6 @@ class Commander:
         res = self.client.request(message)
         # if res in 'None', try restarting sim
         while not res:
-            #self.start_sim(restart=True)
             print('[{}] sim error while trying to request {}'.format(self.name, message))
             self.reconnect()
             self.reset_agent()
