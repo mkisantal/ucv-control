@@ -39,6 +39,7 @@ class ACNetwork:
     def __init__(self, action_space_size, state_space_shape, scope, trainer, ):
         with tf.variable_scope(scope):
             self.inputs = tf.placeholder(shape=[None]+state_space_shape, dtype=tf.float32)  # grayscale or RGB?
+            self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
             self.conv1 = slim.conv2d(inputs=self.inputs,
                                      num_outputs=16,
                                      kernel_size=[8, 8],
@@ -83,6 +84,10 @@ class ACNetwork:
                                               weights_initializer=normalized_columns_initializer(1.0),
                                               biases_initializer=None
                                               )
+            self.aux_depth2_hidden = slim.fully_connected(rnn_out, 128, activation_fn=tf.nn.elu)
+            self.aux_depth2_logits = [
+                slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
+                for i in range(4*16)]
 
             if scope != 'global':
                 self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
@@ -95,7 +100,13 @@ class ACNetwork:
                 self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
                 self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy))
                 self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs) * self.advantages)
-                self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy * 0.01
+
+                # Auxiliary Loss Functions
+                self.aux_depth2_losses = [tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+                    labels=self.aux_depth_labels[i], logits=self.aux_depth2_logits[i])) for i in range(4 * 16)]
+                self.aux_depth2_loss = tf.add_n(self.aux_depth2_losses)
+
+                self.loss = 0.5 * self.value_loss + self.policy_loss - self.entropy * 0.01 + self.aux_depth2_loss
 
                 local_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
                 self.gradients = tf.gradients(self.loss, local_vars)
@@ -137,6 +148,13 @@ class Worker:
         rewards = rollout[:, 2]
         next_observations = rollout[:, 3]
         values = rollout[:, 5]
+        aux_depth = rollout[:, 6]
+        identity = np.eye(8)
+        depth_list = [np.vstack(identity[batch, :] for batch in px) for px in np.transpose(aux_depth)]
+        depth_labels = np.swapaxes(np.array(depth_list), 0, 1)
+
+        print('depth_labels len(): {}'.format(len(depth_labels)))
+        print('depth_labels: {}'.format(depth_labels))
 
         rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
         discounted_rewards = discount(rewards_plus, gamma)[:-1]
@@ -151,14 +169,18 @@ class Worker:
                      self.local_AC.actions: actions,
                      self.local_AC.advantages: advantages,
                      self.local_AC.state_in[0]: rnn_state[0],
-                     self.local_AC.state_in[1]: rnn_state[1]}
-        v_l, p_l, e_l, g_n, v_n, _ = sess.run([self.local_AC.value_loss,
-                                               self.local_AC.policy_loss,
-                                               self.local_AC.entropy,
-                                               self.local_AC.grad_norms,
-                                               self.local_AC.var_norms,
-                                               self.local_AC.apply_grads],
-                                              feed_dict=feed_dict)
+                     self.local_AC.state_in[1]: rnn_state[1]
+                     }
+        feed_dict.update({self.local_AC.aux_depth_labels[px]: depth_labels[px] for px in range(4*16)})
+
+        v_l, p_l, e_l, ad2_l, g_n, v_n, _ = sess.run([self.local_AC.value_loss,
+                                                      self.local_AC.policy_loss,
+                                                      self.local_AC.entropy,
+                                                      self.local_AC.aux_depth2_loss,
+                                                      self.local_AC.grad_norms,
+                                                      self.local_AC.var_norms,
+                                                      self.local_AC.apply_grads],
+                                                     feed_dict=feed_dict)
         return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
 
     def work(self, max_episode_length, gamma, sess, coord, saver):
@@ -178,6 +200,7 @@ class Worker:
                 self.env.new_episode()
                 s = self.env.get_observation()
                 episode_frames.append(s)
+                aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
                 # s = process_frame(s)
                 rnn_state = self.local_AC.state_init
 
@@ -199,8 +222,7 @@ class Worker:
                         # s1 = process_frame(s1)
                     else:
                         s1 = s
-
-                    episode_buffer.append([s, a, r, s1, d, v[0, 0]])
+                    episode_buffer.append([s, a, r, s1, d, v[0, 0], aux_depth])
                     episode_values.append(v[0, 0])
 
                     episode_reward += r
@@ -208,7 +230,9 @@ class Worker:
                     total_steps += 1
                     episode_step_count += 1
 
-                    if (len(episode_buffer) == 30 and d is not True) and (episode_step_count != max_episode_length-1):
+                    aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
+
+                    if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != max_episode_length-1):
                         v1 = sess.run(self.local_AC.value,
                                       feed_dict={self.local_AC.inputs: [s],
                                                  self.local_AC.state_in[0]: rnn_state[0],
@@ -216,7 +240,7 @@ class Worker:
                         v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, gamma, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
-                    if d:
+                    if d or (episode_step_count == max_episode_length-1):
                         break
 
                 self.episode_rewards.append(episode_reward)

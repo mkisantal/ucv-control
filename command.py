@@ -7,10 +7,10 @@ from random import randint
 import time
 import subprocess
 import ucv_utils
-import exceptions
 from unrealcv import Client
 import os
 import matplotlib.pyplot as plt
+from scipy.ndimage import zoom
 
 (HOST, PORT) = ('localhost', 9000)
 sim_dir = '/home/mate/Documents/ucv-pkg3/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
@@ -27,7 +27,7 @@ class Commander:
         self.goal_vector = [math.cos(math.radians(self.goal_heading)), math.sin(math.radians(self.goal_heading)), 0.0]
 
         # RL rewards
-        self.goal_direction_reward = 1.0
+        self.goal_direction_reward = 0.0
         self.crash_reward = -10.0
 
         # Agent actions
@@ -248,8 +248,9 @@ class Commander:
     @staticmethod
     def crop_and_resize(depth_image):
         # resize 84x84 to 16x16, crop center 8x16
-        return zoom(depth_image, [0.19, 0.19], order=1)[4:12, :]
-
+        cropped = depth_image[21:63]
+        resized = zoom(cropped, [0.095, 0.19], order=1)
+        return resized
 
     def new_episode(self):
         # simple respawn: just turn around 180+/-60 deg
