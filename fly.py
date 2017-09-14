@@ -1,10 +1,8 @@
 import tensorflow as tf
 import numpy as np
-
-import ucv_utils
-import unrealcv
-from command import Commander
 import network as net
+from command import Commander
+
 
 
 class Player:
@@ -29,19 +27,16 @@ class Player:
         a = np.argmax(a_dist)
 
         reward = self.env.action(self.actions[a])
+        if reward == -10:
+            print('Crash.')
+            self.env.new_episode()
         self.s = self.env.get_observation()
 
         return
 
 if __name__ == '__main__':
 
-    (HOST, PORT) = ('localhost', 9000)
-    sim_dir = '/home/mate/Documents/ucv-pkg2/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
-    ucv_utils.set_port(PORT, sim_dir)
-
-    client = unrealcv.Client((HOST, PORT))
-    sim = ucv_utils.start_sim(sim_dir, client)
-    cmd = Commander(client, sim_dir, sim)
+    cmd = Commander(0)
 
     tf.reset_default_graph()
     player = Player(cmd)
@@ -57,5 +52,5 @@ if __name__ == '__main__':
                 player.play(sess)
             except KeyboardInterrupt:
                 print('\nShutting down...')
-                sim.terminate()
+                cmd.shut_down()
                 break
