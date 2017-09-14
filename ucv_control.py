@@ -77,6 +77,13 @@ else:
         while not coord.should_stop():
             try:
                 sleep(0.1)
+                for i in range(len(worker_threads)):
+                    if not worker_threads[i].is_alive():
+                        print('Thread {} is dead. Restart attempt...'.format(i))
+                        worker_work = lambda: workers[i].work(max_episode_length, gamma, sess, coord, saver)
+                        worker_threads[i] = threading.Thread(target=worker_work)
+                        worker_threads[i].start()
+
             except KeyboardInterrupt:
                 print('terminating threads.....')
                 coord.request_stop()
