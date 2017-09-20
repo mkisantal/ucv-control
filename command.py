@@ -233,10 +233,11 @@ class Commander:
             res = self.request('vget /camera/0/lit png')
             rgba = self._read_png(res)
             rgb = rgba[:, :, :3]
+            normalized = (rgb - 127.5) / 127.5
             if grayscale is True:
-                observation = np.mean(rgb, 2)
+                observation = np.mean(normalized, 2)
             else:
-                observation = rgb
+                observation = normalized
 
         if show:
             # img = PIL.Image.fromarray(observation)
