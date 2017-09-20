@@ -270,3 +270,7 @@ class Commander:
 
     def is_episode_finished(self):
         return self.episode_finished
+
+    def get_goal_direction(self):
+        gv = np.array([self.goal_vector[:2]])
+        return gv

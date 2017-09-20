@@ -35,6 +35,7 @@ class ACNetwork:
         with tf.variable_scope(scope):
             self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)  # grayscale or RGB?
             self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
+            self.direction_input = tf.placeholder(shape=[None, 2], dtype=tf.float32)
             self.conv1 = slim.conv2d(inputs=self.inputs,
                                      num_outputs=16,
                                      kernel_size=[8, 8],
@@ -56,8 +57,10 @@ class ACNetwork:
             self.state_init = [c_init, h_init]
             c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
             h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            # self.state_in = (c_in, h_in)
-            rnn_in = tf.expand_dims(hidden, [0])
+            if Config.GOAL_ON:
+                rnn_in = tf.expand_dims(tf.concat((hidden, self.direction_input), axis=1), [0])
+            else:
+                rnn_in = tf.expand_dims(hidden, [0])
             step_size = tf.shape(self.inputs)[:1]
             self.state_in = rnn.LSTMStateTuple(c_in, h_in)
             lstm_outputs, lstm_state = \
@@ -147,7 +150,10 @@ class Worker:
         rewards = rollout[:, 2]
         next_observations = rollout[:, 3]
         values = rollout[:, 5]
-        aux_depth = rollout[:, 6]
+        if Config.AUX_TASK_D2:
+            aux_depth = rollout[:, 6]
+        if Config.GOAL_ON:
+            goal_vector = np.vstack(gv for gv in rollout[:, -1])    # TODO: won't work with more aux tasks or additional inputs
         identity = np.eye(8)
 
         rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
@@ -177,9 +183,13 @@ class Worker:
             depth_labels = np.swapaxes(np.array(depth_list), 0, 1)
             feed_dict.update({self.local_AC.aux_depth_labels[px]: depth_labels[px] for px in range(4*16)})
             ops_for_run.insert(3, self.local_AC.aux_depth2_loss)
-            v_l, p_l, e_l, ad2_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
-        else:
-            v_l, p_l, e_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
+            # v_l, p_l, e_l, ad2_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
+        if Config.GOAL_ON:
+            feed_dict.update({self.local_AC.direction_input: goal_vector})
+            # v_l, p_l, e_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
+        results = sess.run(ops_for_run, feed_dict=feed_dict)
+        v_l, p_l, e_l = results[:3]
+        g_n, v_n = results[-3:-1]
 
         return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
 
@@ -200,17 +210,22 @@ class Worker:
                 self.env.new_episode()
                 s = self.env.get_observation()
                 episode_frames.append(s)
-                aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
-                # s = process_frame(s)
+                if Config.AUX_TASK_D2:
+                    aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
+                if Config.GOAL_ON:
+                    goal_vector = self.env.get_goal_direction()
                 rnn_state = self.local_AC.state_init
 
                 while self.env.is_episode_finished() is False:
+                    feed_dict = {self.local_AC.inputs: [s],
+                                 self.local_AC.state_in[0]: rnn_state[0],
+                                 self.local_AC.state_in[1]: rnn_state[1]}
+                    if Config.GOAL_ON:
+                        feed_dict.update({self.local_AC.direction_input: goal_vector})
                     a_dist, v, rnn_state = sess.run([self.local_AC.policy,
                                                      self.local_AC.value,
                                                      self.local_AC.state_out],
-                                                    feed_dict={self.local_AC.inputs: [s],
-                                                               self.local_AC.state_in[0]: rnn_state[0],
-                                                               self.local_AC.state_in[1]: rnn_state[1]})
+                                                    feed_dict=feed_dict)
                     a = np.random.choice(a_dist[0], p=a_dist[0])
                     a = np.argmax(a_dist == a)
 
@@ -219,10 +234,17 @@ class Worker:
                     if d is False:
                         s1 = self.env.get_observation()
                         episode_frames.append(s1)
-                        # s1 = process_frame(s1)
                     else:
                         s1 = s
-                    episode_buffer.append([s, a, r, s1, d, v[0, 0], aux_depth])
+
+                    episode_experiences = [s, a, r, s1, d, v[0, 0]]
+                    if Config.AUX_TASK_D2:
+                        aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
+                        episode_experiences.append(aux_depth)
+                    if Config.GOAL_ON:
+                        goal_vector = self.env.get_goal_direction()
+                        episode_experiences.append(goal_vector)
+                    episode_buffer.append(episode_experiences)
                     episode_values.append(v[0, 0])
 
                     episode_reward += r
@@ -230,7 +252,6 @@ class Worker:
                     total_steps += 1
                     episode_step_count += 1
 
-                    aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
 
                     if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != Config.MAX_EPISODE_LENGTH):
                         v1 = sess.run(self.local_AC.value,

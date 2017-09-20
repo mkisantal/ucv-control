@@ -14,6 +14,7 @@ class Config:
     ACTIONS = 3
     NUM_WORKERS = 1
     MAX_EPISODES = 10
+    GOAL_ON = True
 
     # Auxiliary tasks
     AUX_TASK_D2 = True
