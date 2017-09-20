@@ -11,10 +11,7 @@ from unrealcv import Client
 import os
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
-
-(HOST, PORT) = ('localhost', 9000)
-sim_dir = '/home/mate/Documents/ucv-pkg3/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
-sim_name = 'unrealCVfirst-Linux-Shipping'
+from config import Config
 
 
 class Commander:
@@ -39,7 +36,7 @@ class Commander:
         self.should_terminate = False
 
         self.sim = None
-        self.client = Client((HOST, PORT + number))
+        self.client = Client((Config.HOST, Config.PORT + number))
         self.should_stop = False
         self.mode = mode
         if self.mode == 'test':
@@ -61,10 +58,10 @@ class Commander:
         while not got_connection and not self.should_stop:
             self.shut_down()
             port = self.client.message_client.endpoint[1]
-            ucv_utils.set_port(port, sim_dir)
+            ucv_utils.set_port(port, Config.SIM_DIR)
             print('Connection attempt: {}'.format(attempt))
             with open(os.devnull, 'w') as fp:
-                self.sim = subprocess.Popen(sim_dir + sim_name, stdout=fp)
+                self.sim = subprocess.Popen(Config.SIM_DIR + Config.SIM_NAME, stdout=fp)
             attempt += 1
             time.sleep(10)
             self.client.connect()
@@ -272,4 +269,3 @@ class Commander:
 
     def is_episode_finished(self):
         return self.episode_finished
-

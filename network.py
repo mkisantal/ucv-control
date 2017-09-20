@@ -3,13 +3,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import tensorflow.contrib.rnn as rnn
 import scipy.signal
-from unrealcv import Client
 from command import Commander
-import os
-import subprocess
-import time
-import ucv_utils
-from random import randint
 from config import Config
 
 
@@ -37,9 +31,9 @@ def discount(x, gamma):
 
 
 class ACNetwork:
-    def __init__(self, action_space_size, state_space_shape, scope, trainer, ):
+    def __init__(self, scope, trainer):
         with tf.variable_scope(scope):
-            self.inputs = tf.placeholder(shape=[None]+state_space_shape, dtype=tf.float32)  # grayscale or RGB?
+            self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)  # grayscale or RGB?
             self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
             self.conv1 = slim.conv2d(inputs=self.inputs,
                                      num_outputs=16,
@@ -76,7 +70,7 @@ class ACNetwork:
             self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
             rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 
-            self.policy = slim.fully_connected(rnn_out, action_space_size,
+            self.policy = slim.fully_connected(rnn_out, Config.ACTIONS,
                                                activation_fn=tf.nn.softmax,
                                                weights_initializer=normalized_columns_initializer(0.01),
                                                biases_initializer=None)
@@ -93,7 +87,7 @@ class ACNetwork:
 
             if scope != 'global':
                 self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
-                self.actions_onehot = tf.one_hot(self.actions, action_space_size, dtype=tf.float32)
+                self.actions_onehot = tf.one_hot(self.actions, Config.ACTIONS, dtype=tf.float32)
                 self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
                 self.advantages = tf.placeholder(shape=[None], dtype=tf.float32)
 
@@ -124,10 +118,10 @@ class ACNetwork:
 
 
 class Worker:
-    def __init__(self, name, model_path, trainer, global_episodes):
+    def __init__(self, name, trainer, global_episodes):
         self.name = 'worker_' + str(name)
         self.number = name
-        self.model_path = model_path
+        self.model_path = Config.MODEL_PATH
         self.trainer = trainer
         self.global_episodes = global_episodes
         self.increment = global_episodes.assign_add(1)
@@ -139,7 +133,7 @@ class Worker:
         # restructuring
         self.env = Commander(self.number, mode='test')
 
-        self.local_AC = ACNetwork(len(self.env.action_space), self.env.state_space_size, self.name, trainer)
+        self.local_AC = ACNetwork(self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)
 
         # setting up game here
@@ -189,7 +183,7 @@ class Worker:
 
         return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
 
-    def work(self, max_episode_length, gamma, sess, coord, saver):
+    def work(self, sess, coord, saver):
         episode_count = sess.run(self.global_episodes)
         total_steps = 0
         print('Starting worker ' + str(self.number))
@@ -238,15 +232,15 @@ class Worker:
 
                     aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
 
-                    if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != max_episode_length-1):
+                    if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != Config.MAX_EPISODE_LENGTH):
                         v1 = sess.run(self.local_AC.value,
                                       feed_dict={self.local_AC.inputs: [s],
                                                  self.local_AC.state_in[0]: rnn_state[0],
                                                  self.local_AC.state_in[1]: rnn_state[1]})
-                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, gamma, sess)
+                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, Config.GAMMA, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
-                    if d or (episode_step_count == max_episode_length - 1):
+                    if d or (episode_step_count == Config.MAX_EPISODE_LENGTH - 1):
                         break
 
                 self.episode_rewards.append(episode_reward)
@@ -254,11 +248,15 @@ class Worker:
                 self.episode_mean_values.append(np.mean(episode_values))
 
                 if len(episode_buffer) != 0:
-                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, gamma, sess)
+                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, Config.GAMMA, sess)
 
                 if episode_count % 5 == 0 and episode_step_count != 0:
-                    if episode_count % 250 == 0 and self.name == 'worker_0':
+                    if episode_count % Config.MODEL_SAVE_FREQ == 0 and self.name == 'worker_0':
                         saver.save(sess, self.model_path+'/model-'+str(episode_count)+'.cptk')
+
+                    if Config.VERBOSITY == 1:
+                        if episode_count % 100 == 0:
+                            print('[{}] completed {} episodes.'.format(self.name, episode_count))
 
                     mean_reward = np.mean(self.episode_rewards[-5:])
                     mean_length = np.mean(self.episode_lengths[-5:])
@@ -277,7 +275,7 @@ class Worker:
                     self.summary_writer.flush()
                 if self.name == 'worker_0':
                     sess.run(self.increment)
-                    if episode_count > 10:   # TODO: max global episodes to hyperparameter
+                    if episode_count > Config.MAX_EPISODES:
                         coord.request_stop()
                 episode_count += 1
 

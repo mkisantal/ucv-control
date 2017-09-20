@@ -4,10 +4,9 @@ import network as net
 from command import Commander
 
 
-
 class Player:
     def __init__(self, env):
-        self.network = net.ACNetwork(len(env.action_space), env.state_space_size, 'global', None)
+        self.network = net.ACNetwork('global', None)
         self.env = env
         self.s = None
         self.rnn_state = None
