@@ -3,7 +3,7 @@ import math
 import numpy as np
 import StringIO
 import PIL.Image
-from random import randint
+from random import randint, sample
 import time
 import subprocess
 import ucv_utils
@@ -22,20 +22,21 @@ class Commander:
         self.name = 'worker_' + str(number)
 
         # navigation goal direction
-        self.goal_heading = 0
-        self.goal_vector = [math.cos(math.radians(self.goal_heading)), math.sin(math.radians(self.goal_heading)), 0.0]
+        self.goal_location = None
+        self.goal_vector = None
 
         self.locations = []
         with open(Config.SIM_DIR + 'locations.yaml', 'r') as loc_file:
             self.locations = yaml.load(loc_file)
 
         # RL rewards
-        self.goal_direction_reward = 0.0
+        self.goal_direction_reward = 1.0
         self.crash_reward = -10.0
 
         # Agent actions
         self.action_space = ('left', 'right', 'forward')  #  'backward'
-        self.state_space_size = [84, 84, 3]  # for now RGB
+        self.state_space_size = Config.STATE_SHAPE  # for now RGB
+        self.speed = 20.0  # cm/step
 
         self.episode_finished = False
         self.should_terminate = False
@@ -98,23 +99,22 @@ class Commander:
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
-        speed = 20.0  # cm/step
         loc_cmd = [0.0, 0.0, 0.0]
         rot_cmd = [0.0, 0.0, 0.0]
         if cmd == 'left':
             # move(loc_cmd=speed, rot_cmd=[0, -angle, 0])
-            loc_cmd[0] = speed
+            loc_cmd[0] = self.speed
             rot_cmd[1] = -angle
         elif cmd == 'right':
             # move(loc_cmd=speed, rot_cmd=[0, angle, 0])
-            loc_cmd[0] = speed
+            loc_cmd[0] = self.speed
             rot_cmd[1] = angle
         elif cmd == 'forward':
             # move(loc_cmd=speed)
-            loc_cmd[0] = speed
+            loc_cmd[0] = self.speed
         elif cmd == 'backward':
             # move(loc_cmd=-speed)
-            loc_cmd[0] = -speed
+            loc_cmd[0] = -self.speed
 
         reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)
         return reward
@@ -206,7 +206,7 @@ class Commander:
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
         if relative:
-            reward = self.calculate_reward(displacement=displacement, collision=collision)
+            reward = self.calculate_reward(displacement, collision)
         else:
             reward = 0
 
@@ -214,10 +214,18 @@ class Commander:
 
     def calculate_reward(self, displacement, collision=False):
         reward = 0
-        distance = np.linalg.norm(np.array(displacement))
-        if distance != 0:
-            norm_displacement = np.array(displacement) / distance
-            reward += np.dot(np.array(self.goal_vector), norm_displacement) * self.goal_direction_reward
+        loc = np.array(self.trajectory[-1]['location'])
+        prev_loc = np.array(self.trajectory[-2]['location'])
+        disp = np.array(displacement)
+        goal_distance = np.linalg.norm(np.subtract(loc, self.goal_location))
+        print('goal_distance is {}'.format(goal_distance))
+        if goal_distance < 200.0:  # closer than 2 meter to the goal
+            return self.goal_direction_reward  # TODO: terminate episode!
+        norm_displacement = np.array(displacement) / self.speed
+        norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
+                           / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
+        print('norm_goal_vector is {}'.format(norm_goal_vector))
+        reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
         if collision:
             reward += self.crash_reward
             self.episode_finished = True
@@ -273,27 +281,30 @@ class Commander:
         resized = zoom(cropped, [0.095, 0.19], order=1)
         return resized
 
-    def new_episode(self, index=None):
+    def new_episode(self):
         # simple respawn: just turn around 180+/-60 deg
         # self.move(rot_cmd=(0.0, randint(120, 240), 0.0))
 
-        # choose random respawn location
-        if index is None:
-            idx = randint(0, len(self.locations)-1)
-        else:
-            idx = index
-        new_loc = (self.locations[idx]['x'], self.locations[idx]['y'], self.locations[idx]['z'])
-        self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*new_loc))   # teleport agent
-        self.move(rot_cmd=(0.0, randint(0, 360), 0.0), relative=True)
-        # self.request()
+        # choose random respawn and goal locations
+        idx_start, idx_goal = sample(range(0, len(self.locations)-1), 2)
+        start_loc = (self.locations[idx_start]['x'], self.locations[idx_start]['y'], self.locations[idx_start]['z'])
+        self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*start_loc))   # teleport agent
+        self.goal_location = np.array([self.locations[idx_goal]['x'], self.locations[idx_goal]['y'], self.locations[idx_goal]['z']])
+        random_heading = (0.0, randint(0, 360), 0.0)
+        self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*random_heading))
 
-        self.goal_heading = randint(0, 360)
+        # reset trajectory
+        self.trajectory = []
+        self.get_pos()
+
         self.episode_finished = False
         return
 
     def is_episode_finished(self):
         return self.episode_finished
 
-    def get_goal_direction(self):
-        gv = np.array([self.goal_vector[:2]])
-        return gv
+    def get_goal_direction(self):   # TODO: relative heading is needed!
+        location = np.array(self.trajectory[-1]['location'])
+        goal_vector = np.subtract(self.goal_location, location)
+        norm_goal_vector = goal_vector / np.linalg.norm(goal_vector)
+        return norm_goal_vector
