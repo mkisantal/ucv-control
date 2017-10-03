@@ -12,6 +12,7 @@ import os
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
 from config import Config
+import yaml
 
 
 class Commander:
@@ -23,6 +24,10 @@ class Commander:
         # navigation goal direction
         self.goal_heading = 0
         self.goal_vector = [math.cos(math.radians(self.goal_heading)), math.sin(math.radians(self.goal_heading)), 0.0]
+
+        self.locations = []
+        with open(Config.SIM_DIR + 'locations.yaml', 'r') as loc_file:
+            self.locations = yaml.load(loc_file)
 
         # RL rewards
         self.goal_direction_reward = 0.0
@@ -111,7 +116,7 @@ class Commander:
             # move(loc_cmd=-speed)
             loc_cmd[0] = -speed
 
-        reward = self.move(loc_cmd[0], rot_cmd)  # TODO: change this to full loc_cmd vector
+        reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)
         return reward
 
     def sim_command(self, cmd):
@@ -178,17 +183,21 @@ class Commander:
 
         return res
 
-    def move(self, loc_cmd=0.0, rot_cmd=(0.0, 0.0, 0.0)):
-        loc, rot = self.get_pos()
-        new_rot = [sum(x) % 360 for x in zip(rot, rot_cmd)]
-        displacement = [loc_cmd * math.cos(math.radians(rot[1])), loc_cmd * math.sin(math.radians(rot[1])), 0.0]
-        new_loc = [sum(x) for x in zip(loc, displacement)]
+    def move(self, loc_cmd=(0.0, 0.0, 0.0), rot_cmd=(0.0, 0.0, 0.0), relative=True):
+        if relative:
+            loc, rot = self.get_pos()
+            new_rot = [sum(x) % 360 for x in zip(rot, rot_cmd)]
+            displacement = [loc_cmd[0] * math.cos(math.radians(rot[1])), loc_cmd[0] * math.sin(math.radians(rot[1])), 0.0]
+            new_loc = [sum(x) for x in zip(loc, displacement)]
+        else:
+            new_rot = rot_cmd
+            new_loc = loc_cmd
         collision = False
 
-        if rot_cmd != (0.0, 0.0, 0.0):
+        if rot_cmd != (0.0, 0.0, 0.0) or not relative:
             res = self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
             assert(res == 'ok')
-        if loc_cmd != 0.0:
+        if loc_cmd != (0.0, 0.0, 0.0) or not relative:
             res = self.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
             if res != 'ok':
                 collision = True
@@ -196,7 +205,10 @@ class Commander:
 
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
-        reward = self.calculate_reward(displacement=displacement, collision=collision)
+        if relative:
+            reward = self.calculate_reward(displacement=displacement, collision=collision)
+        else:
+            reward = 0
 
         return reward
 
@@ -261,9 +273,20 @@ class Commander:
         resized = zoom(cropped, [0.095, 0.19], order=1)
         return resized
 
-    def new_episode(self):
+    def new_episode(self, index=None):
         # simple respawn: just turn around 180+/-60 deg
-        self.move(rot_cmd=(0.0, randint(120, 240), 0.0))
+        # self.move(rot_cmd=(0.0, randint(120, 240), 0.0))
+
+        # choose random respawn location
+        if index is None:
+            idx = randint(0, len(self.locations)-1)
+        else:
+            idx = index
+        new_loc = (self.locations[idx]['x'], self.locations[idx]['y'], self.locations[idx]['z'])
+        self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*new_loc))   # teleport agent
+        self.move(rot_cmd=(0.0, randint(0, 360), 0.0), relative=True)
+        # self.request()
+
         self.goal_heading = randint(0, 360)
         self.episode_finished = False
         return
