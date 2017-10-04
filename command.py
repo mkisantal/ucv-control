@@ -218,19 +218,15 @@ class Commander:
         prev_loc = np.array(self.trajectory[-2]['location'])
         disp = np.array(displacement)
         goal_distance = np.linalg.norm(np.subtract(loc, self.goal_location))
-        print('goal_distance is {}'.format(goal_distance))
         if goal_distance < 200.0:  # closer than 2 meter to the goal
             return self.goal_direction_reward  # TODO: terminate episode!
         norm_displacement = np.array(displacement) / self.speed
         norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
                            / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
-        print('norm_goal_vector is {}'.format(norm_goal_vector))
         reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
         if collision:
             reward += self.crash_reward
             self.episode_finished = True
-
-        # print('reward: {}'.format(reward))
 
         return reward
 
@@ -303,8 +299,16 @@ class Commander:
     def is_episode_finished(self):
         return self.episode_finished
 
-    def get_goal_direction(self):   # TODO: relative heading is needed!
+    def get_goal_direction(self):
         location = np.array(self.trajectory[-1]['location'])
         goal_vector = np.subtract(self.goal_location, location)
-        norm_goal_vector = goal_vector / np.linalg.norm(goal_vector)
-        return norm_goal_vector
+        # norm_goal_vector = goal_vector / np.linalg.norm(goal_vector)
+
+        hdg = self.trajectory[-1]['rotation'][1]
+        goal = math.degrees(math.atan2(goal_vector[1], goal_vector[0]))
+        if goal < 0:
+            goal += 360
+
+        # sin(heading_error) is sufficient for directional input
+        relative = math.sin(math.radians(goal - hdg))
+        return relative
