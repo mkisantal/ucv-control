@@ -311,4 +311,4 @@ class Commander:
 
         # sin(heading_error) is sufficient for directional input
         relative = math.sin(math.radians(goal - hdg))
-        return relative
+        return np.expand_dims(np.expand_dims(relative, 0), 0)
