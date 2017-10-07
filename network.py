@@ -134,7 +134,7 @@ class Worker:
         self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
 
         # restructuring
-        self.env = Commander(self.number, mode='test')
+        self.env = Commander(self.number)
 
         self.local_AC = ACNetwork(self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)

@@ -20,6 +20,7 @@ class Commander:
     def __init__(self, number, mode=None):
         self.trajectory = []
         self.name = 'worker_' + str(number)
+        self.port = 7000 + number * 100
 
         # navigation goal direction
         self.goal_location = None
@@ -42,13 +43,15 @@ class Commander:
         self.should_terminate = False
 
         self.sim = None
-        self.client = Client((Config.HOST, Config.PORT + number))
+        self.client = None
         self.should_stop = False
         self.mode = mode
         if self.mode == 'test':
+            self.client = Client((Config.HOST, Config.PORT + number))
             self.client.connect()
         else:
-            self.start_sim()
+            while not self.start_sim():
+                pass
 
     def shut_down(self):
         if self.client.isconnected():
@@ -58,45 +61,30 @@ class Commander:
             self.sim = None
 
     def start_sim(self, restart=False):
-        # disconnect and terminate if restarting
-        attempt = 1
-        got_connection = False
-        while not got_connection and not self.should_stop:
-            self.shut_down()
-            port = self.client.message_client.endpoint[1]
-            ucv_utils.set_port(port, Config.SIM_DIR)
-            print('Connection attempt: {}'.format(attempt))
-            with open(os.devnull, 'w') as fp:
-                self.sim = subprocess.Popen(Config.SIM_DIR + Config.SIM_NAME, stdout=fp)
-            attempt += 1
-            time.sleep(10)
-            self.client.connect()
-            time.sleep(2)
-            got_connection = self.client.isconnected()
-            if got_connection:
-                if restart:
-                    try:
-                        self.reset_agent()
-                    except TypeError:
-                        got_connection = False
-            else:
-                if attempt > 2:
-                    wait_time = 20 + randint(5, 20)  # rand to avoid too many parallel sim startups
-                    print('Multiple start attempts failed. Trying again in {} seconds.'.format(wait_time))
-                    waited = 0
-                    while not self.should_stop and (waited < wait_time):
-                        time.sleep(1)
-                        waited += 1
-                    attempt = 1
-        return
-
-    def reconnect(self):
-        print('{} trying to reconnect.'.format(self.name))
-        self.client.disconnect()
+        if self.sim is not None:
+            # disconnect and terminate if restarting
+            # self.shut_down()
+            self.sim.terminate()
+        self.port += 1
+        ucv_utils.set_port(self.port, Config.SIM_DIR)
+        time.sleep(2)
+        print('[{}] Connection attempt on PORT {}.'.format(self.name, self.port))
+        with open(os.devnull, 'w') as fp:
+            self.sim = subprocess.Popen(Config.SIM_DIR + Config.SIM_NAME, stdout=fp)
+        time.sleep(5)
+        self.client = Client((Config.HOST, self.port))
         time.sleep(2)
         self.client.connect()
-        connected = self.client.isconnected()
-        return connected
+        time.sleep(2)
+        got_connection = self.client.isconnected()
+        if got_connection:
+            if restart:
+                self.reset_agent()
+            else:
+                self.new_episode()
+            return True
+        else:
+            return False
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
@@ -178,9 +166,8 @@ class Commander:
         # if res in 'None', try restarting sim
         while not res:
             print('[{}] sim error while trying to request {}'.format(self.name, message))
-            success = self.reconnect()
+            success = self.start_sim(restart=True)
             if success:
-                self.reset_agent()
                 res = self.client.request(message)
 
         return res
