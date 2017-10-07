@@ -95,7 +95,8 @@ class Commander:
         self.client.disconnect()
         time.sleep(2)
         self.client.connect()
-        return
+        connected = self.client.isconnected()
+        return connected
 
     def action(self, cmd):
         angle = 20.0  # degrees/step
@@ -166,7 +167,7 @@ class Commander:
         new_rot = self.trajectory[-1]["rotation"]
         res1 = self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
         assert res1
-        res2 = self.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
+        res2 = self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*new_loc))
         assert res2
 
         return
@@ -177,9 +178,10 @@ class Commander:
         # if res in 'None', try restarting sim
         while not res:
             print('[{}] sim error while trying to request {}'.format(self.name, message))
-            self.reconnect()
-            self.reset_agent()
-            res = self.client.request(message)
+            success = self.reconnect()
+            if success:
+                self.reset_agent()
+                res = self.client.request(message)
 
         return res
 
@@ -278,20 +280,21 @@ class Commander:
         return resized
 
     def new_episode(self):
-        # simple respawn: just turn around 180+/-60 deg
-        # self.move(rot_cmd=(0.0, randint(120, 240), 0.0))
-
         # choose random respawn and goal locations
-        idx_start, idx_goal = sample(range(0, len(self.locations)-1), 2)
+        idx_start, idx_goal = sample(range(0, len(self.locations) - 1), 2)
         start_loc = (self.locations[idx_start]['x'], self.locations[idx_start]['y'], self.locations[idx_start]['z'])
-        self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*start_loc))   # teleport agent
         self.goal_location = np.array([self.locations[idx_goal]['x'], self.locations[idx_goal]['y'], self.locations[idx_goal]['z']])
         random_heading = (0.0, randint(0, 360), 0.0)
-        self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*random_heading))
 
         # reset trajectory
         self.trajectory = []
-        self.get_pos()
+        loc = [float(v) for v in start_loc]
+        rot = [float(v) for v in random_heading]
+        self.trajectory.append(dict(location=loc, rotation=rot))
+
+        # teleport agent
+        self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*start_loc))   # teleport agent
+        self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*random_heading))
 
         self.episode_finished = False
         return
