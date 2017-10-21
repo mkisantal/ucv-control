@@ -7,12 +7,12 @@ from random import randint, sample
 import time
 import subprocess
 import ucv_utils
-from unrealcv import Client
 import os
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
 from config import Config
 import yaml
+from unrealcv import Client
 
 
 class Commander:
@@ -266,9 +266,17 @@ class Commander:
         resized = zoom(cropped, [0.095, 0.19], order=1)
         return resized
 
-    def new_episode(self):
+    def new_episode(self, save_trajectory=False, start=None, goal=None):
+
+        if save_trajectory:
+            self.save_trajectory()
+
         # choose random respawn and goal locations
-        idx_start, idx_goal = sample(range(0, len(self.locations) - 1), 2)
+        if start is None or goal is None:
+            idx_start, idx_goal = sample(range(0, len(self.locations) - 1), 2)
+        else:
+            idx_start = start
+            idx_goal = goal
         start_loc = (self.locations[idx_start]['x'], self.locations[idx_start]['y'], self.locations[idx_start]['z'])
         self.goal_location = np.array([self.locations[idx_goal]['x'], self.locations[idx_goal]['y'], self.locations[idx_goal]['z']])
         random_heading = (0.0, randint(0, 360), 0.0)
@@ -302,3 +310,13 @@ class Commander:
         # sin(heading_error) is sufficient for directional input
         relative = math.sin(math.radians(goal - hdg))
         return np.expand_dims(np.expand_dims(relative, 0), 0)
+
+    def save_trajectory(self):
+        filename = './trajectory_{}.yaml'.format(self.name)
+        with open(filename, 'a+') as trajectory_file:
+            traj_dict = {'traj': self.trajectory,
+                         'goal': [float(self.goal_location[0]), float(self.goal_location[1])],
+                         }  # TODO: add rewards
+            yaml.dump([traj_dict], stream=trajectory_file, default_flow_style=False)
+
+
