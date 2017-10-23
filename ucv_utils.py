@@ -16,10 +16,10 @@ def set_port(port, sim_dir):
             if "Height=" in line:
                 line = re.sub('\d{2,4}', str(84), line)
             print line,
-    except OSError:
+    except OSError or IOError:
         print('unrealcv.ini does not exist, launching Sim to create it')
         with open(os.devnull, 'w') as fp:
             sim = Popen(Config.SIM_DIR + Config.SIM_NAME, stdout=fp)
-            sleep(5)
-            sim.terminate()
-            set_port(port, sim_dir)
+        sleep(5)
+        sim.terminate()
+        set_port(port, sim_dir)
