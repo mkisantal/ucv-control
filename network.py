@@ -121,13 +121,14 @@ class ACNetwork:
 
 
 class Worker:
-    def __init__(self, name, trainer, global_episodes):
+    def __init__(self, name, trainer, global_episodes, cumulative_steps):
         self.name = 'worker_' + str(name)
         self.number = name
         self.model_path = Config.MODEL_PATH
         self.trainer = trainer
         self.global_episodes = global_episodes
         self.increment = global_episodes.assign_add(1)
+        self.cumulative_steps = cumulative_steps
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
@@ -228,6 +229,8 @@ class Worker:
                                                     feed_dict=feed_dict)
                     a = np.random.choice(a_dist[0], p=a_dist[0])
                     a = np.argmax(a_dist == a)
+
+                    self.cumulative_steps.increment()
 
                     r = self.env.action(self.actions[a])
                     d = self.env.is_episode_finished()

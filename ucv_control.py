@@ -3,7 +3,7 @@ import tensorflow as tf
 import os
 import threading
 from time import sleep
-from logger import TestLogger
+from logger import TestLogger, CumulativeStepsLogger
 from config import Config
 
 model_path = Config.MODEL_PATH
@@ -17,8 +17,9 @@ with tf.device("/cpu:0"):
     trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
     master_network = net.ACNetwork('global', None)
     workers = []
+    cumulative_steps = CumulativeStepsLogger()
     for i in range(Config.NUM_WORKERS):
-        workers.append(net.Worker(i, trainer, global_episodes))
+        workers.append(net.Worker(i, trainer, global_episodes, cumulative_steps))
     saver = tf.train.Saver()
 with tf.Session() as sess:
     coord = tf.train.Coordinator()
@@ -31,6 +32,7 @@ with tf.Session() as sess:
     # start logger
     logger = TestLogger(workers)
     threading.Thread(target=lambda: logger.work()).start()
+    threading.Thread(target=lambda: cumulative_steps.work()).start()
     worker_threads = []
     for worker in workers:
         worker_work = lambda: worker.work(sess, coord, saver)
@@ -51,5 +53,6 @@ with tf.Session() as sess:
             print('terminating threads.....')
             coord.request_stop()
     logger.should_stop = True
+    cumulative_steps.should_stop = True
     coord.join(worker_threads)
 print('Tot ziens')

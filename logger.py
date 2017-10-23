@@ -24,3 +24,26 @@ class TestLogger:
                 else:
                     log_file.write('{}:{}, {}\n'.format(hour, minute, crashed))
             print('[logger] Shutting down.')
+
+
+class CumulativeStepsLogger:
+    def __init__(self):
+        self.counter = 0
+        self.d = 0
+        self.should_stop = False
+
+    def increment(self):
+        self.counter += 1
+
+    def work(self):
+        with open('step_count_log', 'w') as log_file:
+            while not self.should_stop:
+                time.sleep(10)
+                diff = self.counter - self.d
+                self.d = self.counter
+                hour = time.localtime().tm_hour
+                minute = time.localtime().tm_min
+                log_file.write('{}:{}, {}, {}\n'.format(hour, minute, self.counter, diff))
+
+
+
