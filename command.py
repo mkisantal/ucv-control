@@ -17,6 +17,8 @@ from unrealcv import Client
 
 class Commander:
 
+    """ Class for interacting with an UE4 Game packaged with the UnrealCV plugin"""
+
     def __init__(self, number, mode=None):
         self.trajectory = []
         self.name = 'worker_' + str(number)
@@ -26,6 +28,7 @@ class Commander:
         self.goal_location = None
         self.goal_vector = None
 
+        # list of start and goal locations
         self.locations = []
         with open(Config.SIM_DIR + 'locations.yaml', 'r') as loc_file:
             self.locations = yaml.load(loc_file)
@@ -42,6 +45,7 @@ class Commander:
         self.episode_finished = False
         self.should_terminate = False
 
+        # load UE4 game
         self.sim = None
         self.client = None
         self.should_stop = False
@@ -54,6 +58,9 @@ class Commander:
                 pass
 
     def shut_down(self):
+
+        """ Disconnect client and terminate the game. """
+
         if self.client.isconnected():
             self.client.disconnect()
         if self.sim is not None:
@@ -61,6 +68,9 @@ class Commander:
             self.sim = None
 
     def start_sim(self, restart=False):
+
+        """ Starting game and connecting the UnrealCV client """
+
         if self.sim is not None:
             # disconnect and terminate if restarting
             # self.shut_down()
@@ -69,7 +79,7 @@ class Commander:
         ucv_utils.set_port(self.port, Config.SIM_DIR)
         time.sleep(2)
         print('[{}] Connection attempt on PORT {}.'.format(self.name, self.port))
-        with open(os.devnull, 'w') as fp:
+        with open(os.devnull, 'w') as fp:   # Sim messages on stdout are discarded
             self.sim = subprocess.Popen(Config.SIM_DIR + Config.SIM_NAME, stdout=fp)
         time.sleep(5)
         self.client = Client((Config.HOST, self.port))
@@ -87,6 +97,9 @@ class Commander:
             return False
 
     def action(self, cmd):
+
+        """ Mapping the actions of the RL agent to displacement and rotation commands. """
+
         angle = 20.0  # degrees/step
         loc_cmd = [0.0, 0.0, 0.0]
         rot_cmd = [0.0, 0.0, 0.0]
@@ -108,33 +121,35 @@ class Commander:
         reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)
         return reward
 
-    def sim_command(self, cmd):
-        if cmd == 'save_view':
-            self.save_view()
-        elif cmd == 'change_view':
-            self.change_view()
-        elif cmd == 'get_position':
-            self.get_pos(print_pos=True)
-        return
+    # def sim_command(self, cmd):
+    #     if cmd == 'save_view':
+    #         self.save_view()
+    #     elif cmd == 'change_view':
+    #         self.change_view()
+    #     elif cmd == 'get_position':
+    #         self.get_pos(print_pos=True)
+    #     return
 
-    def save_view(self, viewmode=None):
-        if viewmode is None:
-            viewmode = self.request('vget /viewmode')
-        res2 = self.request('vget /camera/0/' + viewmode)
-        print(res2)
-        return
+    # def save_view(self, viewmode=None):
+    #     if viewmode is None:
+    #         viewmode = self.request('vget /viewmode')
+    #     res2 = self.request('vget /camera/0/' + viewmode)
+    #     print(res2)
+    #     return
 
-    def change_view(self, viewmode=None):
-        if viewmode is None:
-            switch = dict(lit='normal', normal='depth', depth='object_mask', object_mask='lit')
-            res = self.request('vget /viewmode')
-            res2 = self.request('vset /viewmode ' + switch[res])
-            # print(res2)
-        elif viewmode in {'lit', 'normal', 'depth', 'object_mask'}:
-            res2 = self.request('vset /viewmode ' + viewmode)
-        return
+    # def change_view(self, viewmode=None):
+    #     if viewmode is None:
+    #         switch = dict(lit='normal', normal='depth', depth='object_mask', object_mask='lit')
+    #         res = self.request('vget /viewmode')
+    #         res2 = self.request('vset /viewmode ' + switch[res])
+    #         # print(res2)
+    #     elif viewmode in {'lit', 'normal', 'depth', 'object_mask'}:
+    #         res2 = self.request('vset /viewmode ' + viewmode)
+    #     return
 
     def get_pos(self, print_pos=False):
+
+        """ Get the last position from the stored trajectory, if trajectory is empty then request it from the sim. """
 
         if len(self.trajectory) == 0:
             rot = [float(v) for v in self.request('vget /camera/0/rotation').split(' ')]
@@ -151,6 +166,9 @@ class Commander:
         return loc, rot
 
     def reset_agent(self):
+
+        """ Reset the agent to continue interaction in the state where it was interrupted. """
+
         new_loc = self.trajectory[-1]["location"]
         new_rot = self.trajectory[-1]["rotation"]
         res1 = self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
@@ -161,6 +179,8 @@ class Commander:
         return
 
     def request(self, message):
+
+        """ Send request with UnrealCV client, if unsuccessful restart sim. """
 
         res = self.client.request(message)
         # if res in 'None', try restarting sim
@@ -173,6 +193,9 @@ class Commander:
         return res
 
     def move(self, loc_cmd=(0.0, 0.0, 0.0), rot_cmd=(0.0, 0.0, 0.0), relative=True):
+
+        """ Move/rotate agent, update trajectory, return immediate reward. """
+
         if relative:
             loc, rot = self.get_pos()
             new_rot = [sum(x) % 360 for x in zip(rot, rot_cmd)]
@@ -202,6 +225,9 @@ class Commander:
         return reward
 
     def calculate_reward(self, displacement, collision=False):
+
+        """ Calculate displacement based on displacement and collision. """
+
         reward = 0
         loc = np.array(self.trajectory[-1]['location'])
         prev_loc = np.array(self.trajectory[-2]['location'])
@@ -229,6 +255,9 @@ class Commander:
         return np.asarray(img)
 
     def get_observation(self, grayscale=False, show=False, viewmode='lit'):
+
+        """ Get image from the simulator. """
+
         if viewmode == 'depth':
             res = self.request('vget /camera/0/depth npy')
             depth_image = self._read_npy(res)
@@ -254,8 +283,11 @@ class Commander:
         return observation
 
     @staticmethod
-    def quantize_depth(depth_image):    # DEBUG!!!
-        bins = [0, 1, 2, 3, 4, 5, 6, 7]
+    def quantize_depth(depth_image):
+
+        """ Depth classes """
+
+        bins = [0, 1, 2, 3, 4, 5, 6, 7]  # TODO: better depth bins
         out = np.digitize(depth_image, bins) - np.ones(depth_image.shape, dtype=np.int8)
         return out
 
@@ -267,6 +299,8 @@ class Commander:
         return resized
 
     def new_episode(self, save_trajectory=False, start=None, goal=None):
+
+        """ Choose new start and goal locations, replace agent. """
 
         if save_trajectory:
             self.save_trajectory()
@@ -298,6 +332,9 @@ class Commander:
         return self.episode_finished
 
     def get_goal_direction(self):
+
+        """ Producing goal direction input for the agent. """
+
         location = np.array(self.trajectory[-1]['location'])
         goal_vector = np.subtract(self.goal_location, location)
         # norm_goal_vector = goal_vector / np.linalg.norm(goal_vector)
@@ -312,6 +349,9 @@ class Commander:
         return np.expand_dims(np.expand_dims(relative, 0), 0)
 
     def save_trajectory(self):
+
+        """ Save trajectory for evaluation. """
+
         filename = './trajectory_{}.yaml'.format(self.name)
         with open(filename, 'a+') as trajectory_file:
             traj_dict = {'traj': self.trajectory,

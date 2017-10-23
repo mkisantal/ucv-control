@@ -31,11 +31,23 @@ def discount(x, gamma):
 
 
 class ACNetwork:
+
+    """ Actor-Critic Network Class """
+
     def __init__(self, scope, trainer):
+
+        # Graph Definition
         with tf.variable_scope(scope):
-            self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)  # grayscale or RGB?
+            # input image
+            self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)
+
+            # one-hot depth labels for each depth pixel
             self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
+
+            # sin(heading_error)
             self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32)
+
+            # convolutional encoder
             self.conv1 = slim.conv2d(inputs=self.inputs,
                                      num_outputs=16,
                                      kernel_size=[8, 8],
@@ -50,7 +62,7 @@ class ACNetwork:
                                      activation_fn=tf.nn.elu)
             hidden = slim.fully_connected(slim.flatten(self.conv2), 256, activation_fn=tf.nn.elu)
 
-            # LSTM
+            # LSTM layer
             lstm_cell = rnn.BasicLSTMCell(256, state_is_tuple=True)
             c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
             h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
@@ -58,7 +70,7 @@ class ACNetwork:
             c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
             h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
             if Config.GOAL_ON:
-                rnn_in = tf.expand_dims(tf.concat((hidden, self.direction_input), axis=1), [0])
+                rnn_in = tf.expand_dims(tf.concat((hidden, self.direction_input), axis=1), [0])  # goal direction input
             else:
                 rnn_in = tf.expand_dims(hidden, [0])
             step_size = tf.shape(self.inputs)[:1]
@@ -73,6 +85,7 @@ class ACNetwork:
             self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
             rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 
+            # output layers
             self.policy = slim.fully_connected(rnn_out, Config.ACTIONS,
                                                activation_fn=tf.nn.softmax,
                                                weights_initializer=normalized_columns_initializer(0.01),
@@ -82,12 +95,15 @@ class ACNetwork:
                                               weights_initializer=normalized_columns_initializer(1.0),
                                               biases_initializer=None
                                               )
+
+            # auxiliary outputs
             if Config.AUX_TASK_D2:
                 self.aux_depth2_hidden = slim.fully_connected(rnn_out, 128, activation_fn=tf.nn.elu)
                 self.aux_depth2_logits = [
                     slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
                     for i in range(4*16)]
 
+            # loss functions
             if scope != 'global':
                 self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
                 self.actions_onehot = tf.one_hot(self.actions, Config.ACTIONS, dtype=tf.float32)
@@ -121,6 +137,9 @@ class ACNetwork:
 
 
 class Worker:
+
+    """ A3C agent, optionally augmented with aux tasks """
+
     def __init__(self, name, trainer, global_episodes, cumulative_steps):
         self.name = 'worker_' + str(name)
         self.number = name
@@ -133,18 +152,16 @@ class Worker:
         self.episode_lengths = []
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
-
-        # restructuring
-        self.env = Commander(self.number)
-
+        self.env = Commander(self.number)   # RL training (the 'game')
         self.local_AC = ACNetwork(self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)
-
-        # setting up game here
-        # self.env = Commander(self.client, sim_dir, self.sim)  # UnrealCV controller
         self.actions = self.env.action_space
 
     def train(self, rollout, bootstrap_value, gamma, sess):
+
+        """ Actor-Critic + Aux task training """
+
+        # load an episode of experiences
         rollout = np.array(rollout)
         observations = rollout[:, 0]
         actions = rollout[:, 1]
@@ -157,6 +174,7 @@ class Worker:
             goal_vector = np.vstack(gv for gv in rollout[:, -1])    # TODO: won't work with more aux tasks or additional inputs
         identity = np.eye(8)
 
+        # calculating discounted return for each step
         rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
         discounted_rewards = discount(rewards_plus, gamma)[:-1]
         value_plus = np.asarray(values.tolist() + [bootstrap_value])
@@ -179,6 +197,7 @@ class Worker:
                        self.local_AC.var_norms,
                        self.local_AC.apply_grads]
 
+        # if training with auxiliary tasks, augment feed_dict and loss ops
         if Config.AUX_TASK_D2:
             depth_list = [np.vstack(identity[batch, :] for batch in px) for px in np.transpose(aux_depth)]
             depth_labels = np.swapaxes(np.array(depth_list), 0, 1)
@@ -188,6 +207,8 @@ class Worker:
         if Config.GOAL_ON:
             feed_dict.update({self.local_AC.direction_input: goal_vector})
             # v_l, p_l, e_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
+
+        # calculate losses and gradients
         results = sess.run(ops_for_run, feed_dict=feed_dict)
         v_l, p_l, e_l = results[:3]
         g_n, v_n = results[-3:-1]
@@ -195,11 +216,17 @@ class Worker:
         return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
 
     def work(self, sess, coord, saver):
+
+        """ Target function for Thread.run(), policy evaluation on episodes + training """
+
         episode_count = sess.run(self.global_episodes)
         total_steps = 0
         print('Starting worker ' + str(self.number))
         with sess.as_default(), sess.graph.as_default():
+
+            # Training Loop
             while not coord.should_stop():
+                # initializing episode
                 sess.run(self.update_local_ops)
                 episode_buffer = []
                 episode_values = []
@@ -217,7 +244,10 @@ class Worker:
                     goal_direction = self.env.get_goal_direction()
                 rnn_state = self.local_AC.state_init
 
+                # Episode Loop
                 while self.env.is_episode_finished() is False:
+
+                    # running network for action selection
                     feed_dict = {self.local_AC.inputs: [s],
                                  self.local_AC.state_in[0]: rnn_state[0],
                                  self.local_AC.state_in[1]: rnn_state[1]}
@@ -255,6 +285,7 @@ class Worker:
                     total_steps += 1
                     episode_step_count += 1
 
+                    # running training step at the end of episode
                     if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != Config.MAX_EPISODE_LENGTH):
                         feed_dict_v = {self.local_AC.inputs: [s],
                                        self.local_AC.state_in[0]: rnn_state[0],
@@ -269,6 +300,7 @@ class Worker:
                     if d or (episode_step_count == Config.MAX_EPISODE_LENGTH - 1):
                         break
 
+                # Summary writing, model saving, etc.
                 self.episode_rewards.append(episode_reward)
                 self.episode_lengths.append(episode_step_count)
                 self.episode_mean_values.append(np.mean(episode_values))

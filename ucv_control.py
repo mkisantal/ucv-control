@@ -13,23 +13,31 @@ if not os.path.exists(model_path):
     os.makedirs(model_path)
 
 with tf.device("/cpu:0"):
+
+    # initializing a master network
     global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
     trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
     master_network = net.ACNetwork('global', None)
+
+    # initializing workers
     workers = []
     cumulative_steps = CumulativeStepsLogger()
     for i in range(Config.NUM_WORKERS):
         workers.append(net.Worker(i, trainer, global_episodes, cumulative_steps))
     saver = tf.train.Saver()
+
 with tf.Session() as sess:
     coord = tf.train.Coordinator()
+
+    # weight initialization
     if Config.LOAD_MODEL:
         print('Loading model...')
         ckpt = tf.train.get_checkpoint_state(model_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
     else:
         sess.run(tf.global_variables_initializer())
-    # start logger
+
+    # starting logger threads
     logger = TestLogger(workers)
     threading.Thread(target=lambda: logger.work()).start()
     threading.Thread(target=lambda: cumulative_steps.work()).start()
@@ -40,6 +48,8 @@ with tf.Session() as sess:
         t.start()
         sleep(0.5)
         worker_threads.append(t)
+
+    # keep threads running
     while not coord.should_stop():
         try:
             sleep(0.1)
@@ -52,6 +62,8 @@ with tf.Session() as sess:
         except KeyboardInterrupt:
             print('terminating threads.....')
             coord.request_stop()
+
+    # stop training
     logger.should_stop = True
     cumulative_steps.should_stop = True
     coord.join(worker_threads)
