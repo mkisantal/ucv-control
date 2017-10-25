@@ -11,7 +11,7 @@ def set_port(port, sim_dir):
             print('[UnrealCV.Core]', file=ini_file)
             print('Port={}'.format(str(port)), file=ini_file)
             print('Width=84', file=ini_file)
-            print('Width=84', file=ini_file)
+            print('Height=84', file=ini_file)
     except (OSError, IOError) as err:
         print(err)
         print('unrealcv.ini does not exist, launching Sim to create it')
