@@ -9,10 +9,12 @@ class Player:
     def __init__(self, env):
         self.network = net.ACNetwork('global', None)
         self.env = env
+        self.env.new_episode(save_trajectory=False)
         self.s = None
         self.rnn_state = None
         self.actions = self.env.action_space
         self.steps = 0
+        self.episode_count = 0
 
     def play(self, session):
 
@@ -39,12 +41,14 @@ class Player:
         if self.steps > Config.MAX_EPISODE_LENGTH:
             print('Reset.')
             self.steps = 0
+            self.episode_count += 1
             self.env.new_episode(save_trajectory=True)
             self.rnn_state = None
             self.s = None
         print('Reward: {}'.format(reward))
         if cmd.is_episode_finished():
-            print('Crash.')
+            print('Collision.')
+            self.episode_count += 1
             self.env.new_episode(save_trajectory=True)
             self.steps = 0
             self.rnn_state = None
@@ -66,10 +70,11 @@ if __name__ == '__main__':
         model_path = './model'
         ckpt = tf.train.get_checkpoint_state(model_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
-        while True:
+        while player.episode_count < 100:
             try:
                 player.play(sess)
             except KeyboardInterrupt:
                 print('\nShutting down...')
                 cmd.shut_down()
                 break
+        print('Evaluation for {} episodes done.'.format(player.episode_count))
