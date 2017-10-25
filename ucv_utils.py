@@ -1,5 +1,4 @@
-import fileinput
-import re
+from __future__ import print_function
 import os
 from subprocess import Popen
 from config import Config
@@ -8,14 +7,11 @@ from time import sleep
 
 def set_port(port, sim_dir):
     try:
-        for line in fileinput.FileInput(sim_dir + 'unrealcv.ini', inplace=1):
-            if "Port=" in line:
-                line = re.sub('\d{4}', str(port), line)
-            if "Width=" in line:
-                line = re.sub('\d{2,4}', str(84), line)
-            if "Height=" in line:
-                line = re.sub('\d{2,4}', str(84), line)
-            print line,
+        with open(sim_dir + 'unrealcv.ini', 'w') as ini_file:
+            print('[UnrealCV.Core]', file=ini_file)
+            print('Port={}'.format(str(port)), file=ini_file)
+            print('Width=84', file=ini_file)
+            print('Width=84', file=ini_file)
     except (OSError, IOError) as err:
         print(err)
         print('unrealcv.ini does not exist, launching Sim to create it')
