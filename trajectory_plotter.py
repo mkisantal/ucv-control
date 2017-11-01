@@ -79,12 +79,25 @@ def draw_labyrinth(axis):
                 line, = axis.plot(x2, [y[0], y[0]], 'k-')
                 line, = axis.plot(x2, [y[1], y[1]], 'k-')
 
+    obstacles = [[630, -130],
+                 [200, 460],
+                 [1050, 850],
+                 [180, 860],
+                 [630, 1130],
+                 [1030, 1250]]
+    for obstacle in obstacles:
+        axis.plot(obstacle[0], obstacle[1], 'ks')
+
 
 def interpolate_color(value):
         return 0.5 - 0.5*value, 0, 0.5 + 0.5*value
 
 
-def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None):
+def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, single_trajectories=False):
+
+    # if len(traj) < 15:
+    #     return
+
     print('Drawing trajectory with {} points.'.format(len(traj)))
     x = []
     y = []
@@ -97,41 +110,43 @@ def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None):
         y.append(traj[i]['location'][0])
         if goal is not None and i is not 0:
             reward = calculate_reward(traj, i, goal)
-            line, = axis.plot(x[-2:], y[-2:], '-', alpha=0.7, color=interpolate_color(reward))  # 'go-'
+            line, = axis.plot(x[-2:], y[-2:], '-', alpha=0.7, color=interpolate_color(reward), linewidth=0.5)  # 'go-'
 
     if show_crash:
-        axis.plot(traj[-1]['location'][1], traj[-1]['location'][0], 'ro')
+        axis.plot(traj[-1]['location'][1], traj[-1]['location'][0], 'ro', markersize=1)
 
-    # if goal is not None:
-    #     axis.plot(goal[1], goal[0], 'yo')
+    if goal is not None:
+        axis.plot(goal[1], goal[0], 'yo')
 
-    # uncomment to draw single trajectories
-    # plt.draw()
-    # plt.pause(3.0001)
-    # plt.cla()
-    # draw_labyrinth(ax)
+    if single_trajectories:
+        plt.draw()
+        plt.pause(3.0001)
+        plt.cla()
+        draw_labyrinth(ax)
 
 
 if __name__ == '__main__':
 
     # loading trajectory file
-    filename = './trajectory_{}.yaml'.format('worker_0')
+    filename = './trajectory_{}_EVAL_5800.yaml'.format('worker_0')
     with open(filename, 'a+') as trajectory_file:
         trajectories = yaml.load(trajectory_file)
-        # import code
-        # code.interact(local=locals())
 
     fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.set_xlim(-300, 1500)  # TODO: set limits based on trajectories
-    ax.set_ylim(-500, 1300)
-    ax.axis('equal')
+    ax = fig.add_subplot(111, aspect='equal')
     plt.ion()
     plt.show()
     draw_labyrinth(ax)
 
+    counter = 0
     for trajectory in trajectories:
-        draw_trajectory(trajectory['traj'], ax, show_start=True, show_crash=True, goal=trajectory['goal'])
+        counter += 1
+        if counter > 50:
+            pass
+        else:
+            draw_trajectory(trajectory['traj'], ax, show_start=True, show_crash=True, goal=trajectory['goal'])
 
     plt.draw()
-    plt.pause(20)
+
+    fig.savefig('./000_trajectory_eval_plot.svg', format='svg')
+    plt.pause(30)
