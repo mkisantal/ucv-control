@@ -211,9 +211,13 @@ class Commander:
             assert(res == 'ok')
         if loc_cmd != (0.0, 0.0, 0.0) or not relative:
             res = self.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
-            if res != 'ok':
+            assert (res == 'ok')
+            final_loc = [float(v) for v in self.request('vget /camera/0/location').split(' ')]
+            print(final_loc)
+            print(new_loc)
+            if final_loc != [round(v, 2) for v in new_loc]:
                 collision = True
-                new_loc = [float(v) for v in res.split(' ')]
+                new_loc = final_loc
 
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
