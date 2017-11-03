@@ -89,11 +89,18 @@ def draw_labyrinth(axis):
         axis.plot(obstacle[0], obstacle[1], 'ks')
 
 
+def draw_forest(axis):
+        with open('./map2.yaml', 'r') as map_file:
+            obstacles = yaml.load(map_file)
+        for obstacle in obstacles:
+            axis.plot(obstacle[0], obstacle[1], 'ks', markersize=0.2)
+
+
 def interpolate_color(value):
         return 0.5 - 0.5*value, 0, 0.5 + 0.5*value
 
 
-def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, single_trajectories=False):
+def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, single_trajectories=False, index=None):
 
     # if len(traj) < 15:
     #     return
@@ -121,6 +128,7 @@ def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, s
     if single_trajectories:
         plt.draw()
         plt.pause(3.0001)
+        fig.savefig('./EVAL/eval_{}.pdf'.format(counter), format='pdf')
         plt.cla()
         draw_labyrinth(ax)
 
@@ -128,7 +136,7 @@ def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, s
 if __name__ == '__main__':
 
     # loading trajectory file
-    filename = './trajectory_{}_EVAL_5800.yaml'.format('worker_0')
+    filename = './trajectory_{}.yaml'.format('worker_0')
     with open(filename, 'a+') as trajectory_file:
         trajectories = yaml.load(trajectory_file)
 
@@ -137,6 +145,7 @@ if __name__ == '__main__':
     plt.ion()
     plt.show()
     draw_labyrinth(ax)
+    # draw_forest(ax)
 
     counter = 0
     for trajectory in trajectories:
@@ -144,9 +153,9 @@ if __name__ == '__main__':
         if counter > 50:
             pass
         else:
-            draw_trajectory(trajectory['traj'], ax, show_start=True, show_crash=True, goal=trajectory['goal'])
+            draw_trajectory(trajectory['traj'], ax, show_start=True, show_crash=True, goal=trajectory['goal'], index=counter)
 
     plt.draw()
 
-    fig.savefig('./000_trajectory_eval_plot.svg', format='svg')
+    fig.savefig('./000_trajectory_eval_plot.pdf', format='pdf')
     plt.pause(30)
