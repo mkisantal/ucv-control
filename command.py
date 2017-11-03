@@ -2,7 +2,7 @@
 import math
 import numpy as np
 import StringIO
-import PIL.Image
+from PIL import Image
 from random import randint, sample
 import time
 import subprocess
@@ -30,8 +30,11 @@ class Commander:
 
         # list of start and goal locations
         self.locations = []
-        with open(Config.SIM_DIR + 'locations.yaml', 'r') as loc_file:
-            self.locations = yaml.load(loc_file)
+        if Config.RANDOM_SPAWN_LOCATIONS:
+            self.locations = None
+        else:
+            with open(Config.SIM_DIR + 'locations.yaml', 'r') as loc_file:
+                self.locations = yaml.load(loc_file)
 
         # RL rewards
         self.goal_direction_reward = 1.0
@@ -211,10 +214,8 @@ class Commander:
             assert(res == 'ok')
         if loc_cmd != (0.0, 0.0, 0.0) or not relative:
             res = self.request('vset /camera/0/moveto {:.2f} {:.2f} {:.2f}'.format(*new_loc))
-            assert (res == 'ok')
+            # assert (res == 'ok')
             final_loc = [float(v) for v in self.request('vget /camera/0/location').split(' ')]
-            print(final_loc)
-            print(new_loc)
             if final_loc != [round(v, 2) for v in new_loc]:
                 collision = True
                 new_loc = final_loc
@@ -255,7 +256,7 @@ class Commander:
 
     @staticmethod
     def _read_png(res):
-        img = PIL.Image.open(StringIO.StringIO(res))
+        img = Image.open(StringIO.StringIO(res))
         return np.asarray(img)
 
     def get_observation(self, grayscale=False, show=False, viewmode='lit'):
@@ -278,7 +279,7 @@ class Commander:
                 observation = normalized
 
         if show:
-            # img = PIL.Image.fromarray(observation)
+            # img = Image.fromarray(observation)
             # img.show()
             plt.imshow(observation)
             plt.savefig('depth.png')
@@ -302,6 +303,27 @@ class Commander:
         resized = zoom(cropped, [0.095, 0.19], order=1)
         return resized
 
+    def random_start_location(self, heading):
+        collision_at_start = True
+        while collision_at_start:
+            # spawn location is ok, if we can move forward a bit without colliding
+            start_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
+            start_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+            self.request('vset /camera/0/pose {} {} {} {} {} {}'.format(start_x, start_y, 150, 0, heading, 0))
+            step = 50
+            small_step_forward = (start_x + step * math.cos(math.radians(heading)),
+                                  start_y + step * math.sin(math.radians(heading)), 150.0)
+            self.request('vset /camera/0/moveto {} {} {}'.format(*small_step_forward))
+            final_loc = [round(float(v), 2) for v in self.request('vget /camera/0/location').split(' ')]
+            if final_loc == [round(v, 2) for v in small_step_forward]:
+                # acceptable start location found
+                collision_at_start = False
+            else:
+                time.sleep(1)
+
+        return start_x, start_y
+
+
     def new_episode(self, save_trajectory=False, start=None, goal=None):
 
         """ Choose new start and goal locations, replace agent. """
@@ -309,15 +331,22 @@ class Commander:
         if save_trajectory:
             self.save_trajectory()
 
-        # choose random respawn and goal locations
-        if start is None or goal is None:
-            idx_start, idx_goal = sample(range(0, len(self.locations) - 1), 2)
-        else:
-            idx_start = start
-            idx_goal = goal
-        start_loc = (self.locations[idx_start]['x'], self.locations[idx_start]['y'], self.locations[idx_start]['z'])
-        self.goal_location = np.array([self.locations[idx_goal]['x'], self.locations[idx_goal]['y'], self.locations[idx_goal]['z']])
+        # choose random respawn and goal locations, either randomly or from a list of predetermined locations
         random_heading = (0.0, randint(0, 360), 0.0)
+        if Config.RANDOM_SPAWN_LOCATIONS:
+            goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
+            goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+            start_x, start_y = self.random_start_location(random_heading[1])
+            start_loc = (start_x, start_y, 150)
+            self.goal_location = (goal_x, goal_y, 150)
+        else:
+            if start is None or goal is None:
+                idx_start, idx_goal = sample(range(0, len(self.locations) - 1), 2)
+            else:
+                idx_start = start
+                idx_goal = goal
+            start_loc = (self.locations[idx_start]['x'], self.locations[idx_start]['y'], self.locations[idx_start]['z'])
+            self.goal_location = np.array([self.locations[idx_goal]['x'], self.locations[idx_goal]['y'], self.locations[idx_goal]['z']])
 
         # reset trajectory
         self.trajectory = []
