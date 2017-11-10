@@ -42,6 +42,7 @@ class Player:
             print('Reset.')
             self.steps = 0
             self.episode_count += 1
+            print(self.episode_count)
             self.env.new_episode(save_trajectory=True)
             self.rnn_state = None
             self.s = None
@@ -49,13 +50,15 @@ class Player:
         if cmd.is_episode_finished():
             print('Collision.')
             self.episode_count += 1
+            print(self.episode_count)
             self.env.new_episode(save_trajectory=True)
             self.steps = 0
             self.rnn_state = None
             self.s = None
-        self.s = self.env.get_observation()
+            self.s = self.env.get_observation()
 
         return
+
 
 if __name__ == '__main__':
 
@@ -70,7 +73,7 @@ if __name__ == '__main__':
         model_path = './model'
         ckpt = tf.train.get_checkpoint_state(model_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
-        while player.episode_count < 100:
+        while player.episode_count < 20:
             try:
                 player.play(sess)
             except KeyboardInterrupt:
