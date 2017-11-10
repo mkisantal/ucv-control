@@ -36,13 +36,13 @@ class CumulativeStepsLogger:
         self.counter += 1
 
     def work(self):
-        with open('step_count_log', 'w') as log_file:
-            while not self.should_stop:
-                time.sleep(10)
-                diff = self.counter - self.d
-                self.d = self.counter
-                hour = time.localtime().tm_hour
-                minute = time.localtime().tm_min
+        while not self.should_stop:
+            time.sleep(10)
+            diff = self.counter - self.d
+            self.d = self.counter
+            hour = time.localtime().tm_hour
+            minute = time.localtime().tm_min
+            with open('step_count_log', 'a') as log_file:
                 log_file.write('{}:{}, {}, {}\n'.format(hour, minute, self.counter, diff))
 
 
