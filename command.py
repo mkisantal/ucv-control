@@ -23,6 +23,7 @@ class Commander:
         self.trajectory = []
         self.name = 'worker_' + str(number)
         self.port = 7000 + number * 100
+	self.number = number
 
         # navigation goal direction
         self.goal_location = None
@@ -33,7 +34,7 @@ class Commander:
         if Config.RANDOM_SPAWN_LOCATIONS:
             self.locations = None
         else:
-            with open(Config.SIM_DIR + 'locations.yaml', 'r') as loc_file:
+            with open(Config.SIM_DIR_LIST[number] + 'locations.yaml', 'r') as loc_file:
                 self.locations = yaml.load(loc_file)
 
         # RL rewards
@@ -79,11 +80,11 @@ class Commander:
             # self.shut_down()
             self.sim.terminate()
         self.port += 1
-        ucv_utils.set_port(self.port, Config.SIM_DIR)
+        ucv_utils.set_port(self.port, Config.SIM_DIR_LIST[self.number])
         time.sleep(2)
         print('[{}] Connection attempt on PORT {}.'.format(self.name, self.port))
         with open(os.devnull, 'w') as fp:   # Sim messages on stdout are discarded
-            self.sim = subprocess.Popen(Config.SIM_DIR + Config.SIM_NAME, stdout=fp)
+            self.sim = subprocess.Popen(Config.SIM_DIR_LIST[self.number] + Config.SIM_NAME, stdout=fp)
         time.sleep(5)
         self.client = Client((Config.HOST, self.port))
         time.sleep(2)
@@ -318,11 +319,8 @@ class Commander:
             if final_loc == [round(v, 2) for v in small_step_forward]:
                 # acceptable start location found
                 collision_at_start = False
-            else:
-                time.sleep(1)
 
         return start_x, start_y
-
 
     def new_episode(self, save_trajectory=False, start=None, goal=None):
 
@@ -337,6 +335,10 @@ class Commander:
             goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
             goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
             start_x, start_y = self.random_start_location(random_heading[1])
+            # goal_x = 4000
+            # goal_y = -4000
+            # start_x = -4000
+            # start_y = 4000
             start_loc = (start_x, start_y, 150)
             self.goal_location = (goal_x, goal_y, 150)
         else:
