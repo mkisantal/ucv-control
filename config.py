@@ -9,6 +9,7 @@ class Config:
 
     # Basic RL settings
     MAX_EPISODE_LENGTH = 30
+    STEPS_FOR_UPDATE = 5
     GAMMA = 0.99
     STATE_SHAPE = [84, 84, 3]  # RGB
     ACTIONS = 3

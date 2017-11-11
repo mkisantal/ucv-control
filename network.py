@@ -156,6 +156,7 @@ class Worker:
         self.local_AC = ACNetwork(self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
+        self.batch_rnn_state_init = None
 
     def train(self, rollout, bootstrap_value, gamma, sess):
 
@@ -212,6 +213,7 @@ class Worker:
         results = sess.run(ops_for_run, feed_dict=feed_dict)
         v_l, p_l, e_l = results[:3]
         g_n, v_n = results[-3:-1]
+        self.batch_rnn_state_init = results[-1]
 
         return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
 
@@ -243,6 +245,7 @@ class Worker:
                 if Config.GOAL_ON:
                     goal_direction = self.env.get_goal_direction()
                 rnn_state = self.local_AC.state_init
+                self.batch_rnn_state_init = rnn_state
 
                 # Episode Loop
                 while self.env.is_episode_finished() is False:
@@ -286,7 +289,8 @@ class Worker:
                     episode_step_count += 1
 
                     # running training step at the end of episode
-                    if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != Config.MAX_EPISODE_LENGTH):
+                    if (len(episode_buffer) == Config.STEPS_FOR_UPDATE) or d or (episode_step_count == Config.MAX_EPISODE_LENGTH):
+                        # bootstrap value from the last step for return calculation
                         feed_dict_v = {self.local_AC.inputs: [s],
                                        self.local_AC.state_in[0]: rnn_state[0],
                                        self.local_AC.state_in[1]: rnn_state[1]}
@@ -297,7 +301,7 @@ class Worker:
                         v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, Config.GAMMA, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
-                    if d or (episode_step_count == Config.MAX_EPISODE_LENGTH - 1):
+                    if d or (episode_step_count == Config.MAX_EPISODE_LENGTH):
                         break
 
                 # Summary writing, model saving, etc.
@@ -333,7 +337,7 @@ class Worker:
                     self.summary_writer.flush()
                 if self.name == 'worker_0':
                     sess.run(self.increment)
-		    print('--- worker_0 {}'.format(episode_count))
+                    print('--- worker_0 {}'.format(episode_count))
                     if episode_count > Config.MAX_EPISODES:
                         coord.request_stop()
                 episode_count += 1
