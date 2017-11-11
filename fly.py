@@ -38,8 +38,8 @@ class Player:
 
         reward = self.env.action(self.actions[a])
         self.steps += 1
-        if self.steps > Config.MAX_EPISODE_LENGTH:
-            print('Reset.')
+        if self.steps > Config.MAX_EVALUATION_EPISODE_LENGTH:
+            print('Max episode length reached. Resetting agent.')
             self.steps = 0
             self.episode_count += 1
             print(self.episode_count)
@@ -62,6 +62,10 @@ class Player:
 
 if __name__ == '__main__':
 
+    if not Config.EVAL_MODE:
+        print('\nNot in evaluation mode.\nPlease EVAL_MODE in Config to \'True\'! Shutting down...')
+        exit()
+
     cmd = Commander(0)
 
     tf.reset_default_graph()
@@ -81,3 +85,4 @@ if __name__ == '__main__':
                 cmd.shut_down()
                 break
         print('Evaluation for {} episodes done.'.format(player.episode_count))
+        cmd.shut_down()
