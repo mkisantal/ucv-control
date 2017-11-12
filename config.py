@@ -1,6 +1,9 @@
 
 class Config:
 
+    # mode selector: training or evaluation
+    TRAIN_MODE = True
+
     # Training Settings
     LOAD_MODEL = True
     MODEL_PATH = './model'
@@ -21,8 +24,8 @@ class Config:
     AUX_TASK_D2 = True
 
     # Evaluation settings
-    EVAL_MODE = True
     MAX_EVALUATION_EPISODE_LENGTH = 2
+    MAX_EPISODES_FOR_EVAL = 3
     EVAL_GOAL_X = 4000
     EVAL_GOAL_Y = -4000
     EVAL_START_X = -4000

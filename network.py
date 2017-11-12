@@ -346,3 +346,80 @@ class Worker:
             print('Shutting down {}...    '.format(self.name))
             self.env.shut_down()
             print('       Sim and client closed.')
+
+
+class Player:
+
+    """ A3C Agent for evaluation. """
+
+    def __init__(self, number):
+        self.number = number
+        self.name = 'player_' + str(number)
+        print('Initializing {} ...'.format(self.name))
+        self.local_AC = ACNetwork('player_{}'.format(self.number), None)
+        self.update_local_ops = update_target_graph('global', 'player_{}'.format(self.number))
+        self.env = Commander(self.number)
+        self.actions = self.env.action_space
+        self.episode_count = 0
+        self.steps = 0
+        self.rnn_state = None
+        self.s = None
+        self.stop_requested = False
+
+        print('[{}] initialization done.'.format(self.name))
+
+    def play(self, session, coordinator):
+
+        with session.as_default(), session.graph.as_default():
+            session.run(self.update_local_ops)  # loading weights
+
+            # evaluation loop
+            while not coordinator.should_stop():
+                if self.s is None or self.rnn_state is None:
+                    # first step
+                    self.s = self.env.get_observation()
+                    self.rnn_state = self.local_AC.state_init
+
+                feed_dict = {self.local_AC.inputs: [self.env.get_observation()],
+                             self.local_AC.state_in[0]: self.local_AC.state_init[0],
+                             self.local_AC.state_in[1]: self.local_AC.state_init[1]}
+                if Config.GOAL_ON:
+                    goal_direction = self.env.get_goal_direction()
+                    feed_dict.update({self.local_AC.direction_input: goal_direction})
+
+                if Config.AUX_TASK_D2:
+                    self.env.get_observation(viewmode='depth')
+                    pass
+
+                # running inference on network, action selection
+                a_dist, self.rnn_state = session.run([self.local_AC.policy, self.local_AC.state_out], feed_dict=feed_dict)
+                a = np.argmax(a_dist)
+
+                reward = self.env.action(self.actions[a])
+                self.steps += 1
+
+                if self.steps > Config.MAX_EVALUATION_EPISODE_LENGTH:
+                    self.steps = 0
+                    self.episode_count += 1
+                    print('[{}]:{} Max episode length reached.'.format(self.name, self.episode_count))
+                    self.env.new_episode(save_trajectory=True)
+                    self.rnn_state = None
+                    self.s = None
+
+                if self.env.is_episode_finished():
+                    self.episode_count += 1
+                    print('[{}]:{} Collision.'.format(self.name, self.episode_count))
+                    self.env.new_episode(save_trajectory=True)
+                    self.steps = 0
+                    self.rnn_state = None
+                    self.s = None
+                    self.s = self.env.get_observation()
+
+
+
+
+
+
+
+
+

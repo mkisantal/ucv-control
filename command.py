@@ -332,15 +332,15 @@ class Commander:
         # choose random respawn and goal locations, either randomly or from a list of predetermined locations
         random_heading = (0.0, randint(0, 360), 0.0)
         if Config.RANDOM_SPAWN_LOCATIONS:
-            if Config.EVAL_MODE:
+            if Config.TRAIN_MODE:
+                goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
+                goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+                start_x, start_y = self.random_start_location(random_heading[1])
+            else:
                 goal_x = Config.EVAL_GOAL_X
                 goal_y = Config.EVAL_GOAL_Y
                 start_x = Config.EVAL_START_X
                 start_y = Config.EVAL_START_Y
-            else:
-                goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
-                goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
-                start_x, start_y = self.random_start_location(random_heading[1])
             start_loc = (start_x, start_y, 150)
             self.goal_location = (goal_x, goal_y, 150)
         else:
