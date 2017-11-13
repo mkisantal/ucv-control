@@ -1,60 +1,59 @@
 
-class Config:
+class Configuration:
+    def __init__(self, mode, episodes):
 
-    # mode selector: training or evaluation
-    TRAIN_MODE = True
+        # mode selector: training or evaluation
+        if mode == 'train':
+            self.TRAIN_MODE = True
+        elif mode == 'eval':
+            self.TRAIN_MODE = False
+        else:
+            raise ValueError('Mode has to be either \'train\' or \'eval\'')
 
-    # Training Settings
-    LOAD_MODEL = True
-    MODEL_PATH = './model'
-    MODEL_SAVE_FREQ = 50
-    VERBOSITY = 1
+        self.MAX_EPISODES = episodes  # absolute episode count, for training
 
-    # Basic RL settings
-    MAX_EPISODE_LENGTH = 30
-    STEPS_FOR_UPDATE = 5
-    GAMMA = 0.99
-    STATE_SHAPE = [84, 84, 3]  # RGB
-    ACTIONS = 3
-    NUM_WORKERS = 8
-    MAX_EPISODES = 6000
-    GOAL_ON = True
+        # ---------------------------------------------------------------
+        # SET THE PARAMETERS BELOW PARAMETERS MANUALLY
+        # Training Settings
+        self.LOAD_MODEL = False
+        self.MODEL_PATH = './model'
+        self.MODEL_SAVE_FREQ = 25
+        self.VERBOSITY = 1
 
-    # Auxiliary tasks
-    AUX_TASK_D2 = True
+        # Basic RL settings
+        self.MAX_EPISODE_LENGTH = 120
+        self.STEPS_FOR_UPDATE = 5
+        self.GAMMA = 0.99
+        self.STATE_SHAPE = [84, 84, 3]  # RGB
+        self.ACTIONS = 3
+        self.NUM_WORKERS = 8
+        self.GOAL_ON = True
 
-    # Evaluation settings
-    MAX_EVALUATION_EPISODE_LENGTH = 2
-    MAX_EPISODES_FOR_EVAL = 3
-    EVAL_GOAL_X = 4000
-    EVAL_GOAL_Y = -4000
-    EVAL_START_X = -4000
-    EVAL_START_Y = 4000
+        # Auxiliary tasks
+        self.AUX_TASK_D2 = True
 
+        # Evaluation settings
+        self.MAX_EVALUATION_EPISODE_LENGTH = 750
+        self.MAX_EPISODES_FOR_EVAL = 20
+        self.EVAL_GOAL_X = 4000
+        self.EVAL_GOAL_Y = -4000
+        self.EVAL_START_X = -4000
+        self.EVAL_START_Y = 4000
 
-    # Simulator settings
-    HOST = 'localhost'
-    PORT = 9000
-    # SIM_DIR = '/home/mate/ucv-pkg-labyrinth/LinuxNoEditor/unrealCVfirst/Binaries/Linux/'
-    # SIM_NAME = 'unrealCVfirst-Linux-Shipping'
-    # SIM_DIR = '/home/mate/Documents/ucv-pkg-outdoor5/LinuxNoEditor/outdoor/Binaries/Linux/'
-    # SIM_NAME = 'outdoor'
-    SIM_DIR = '/home/mate/Documents/ucv-pkg-outdoor-8-lite/LinuxNoEditor/outdoor_lite/Binaries/Linux/'
-    SIM_NAME = 'outdoor_lite'
+        # Simulator settings
+        self.HOST = 'localhost'
+        self.PORT = 9000
 
-    SIM_DIR_LIST = ['/home/mate/Documents/ucv-pkg-outdoor-8-lite/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite1/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite2/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite3/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite4/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite5/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite6/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
-                    '/home/mate/Documents/ucv-pkg-outdoor-8-lite7/LinuxNoEditor/outdoor_lite/Binaries/Linux/']
+        self.SIM_DIR = '/home/mate/ucv-pkg-outdoor-8-lite/LinuxNoEditor/outdoor_lite/Binaries/Linux/'
+        self.SIM_NAME = 'outdoor_lite'
 
-    RANDOM_SPAWN_LOCATIONS = True
-    MAP_X_MIN = -4000
-    MAP_X_MAX = 4000
-    MAP_Y_MIN = -4000
-    MAP_Y_MAX = 4000
+        self.SIM_DIR_LIST = ['/home/mate/ucv-pkg-outdoor-8-lite/LinuxNoEditor/outdoor_lite/Binaries/Linux/',
+                             '/home/mate/ucv-pkg-outdoor-8-lite/LinuxNoEditor/outdoor_lite/Binaries/Linux/']
+
+        self.RANDOM_SPAWN_LOCATIONS = True
+        self.MAP_X_MIN = -4000
+        self.MAP_X_MAX = 4000
+        self.MAP_Y_MIN = -4000
+        self.MAP_Y_MAX = 4000
 
 

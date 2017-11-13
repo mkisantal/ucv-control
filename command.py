@@ -10,7 +10,6 @@ import ucv_utils
 import os
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom
-from config import Config
 import yaml
 from unrealcv import Client
 
@@ -19,7 +18,8 @@ class Commander:
 
     """ Class for interacting with an UE4 Game packaged with the UnrealCV plugin"""
 
-    def __init__(self, number, mode=None):
+    def __init__(self, number, config, mode=None):
+        self.config = config
         self.trajectory = []
         self.name = 'worker_' + str(number)
         self.port = 7000 + number * 100
@@ -31,10 +31,10 @@ class Commander:
 
         # list of start and goal locations
         self.locations = []
-        if Config.RANDOM_SPAWN_LOCATIONS:
+        if self.config.RANDOM_SPAWN_LOCATIONS:
             self.locations = None
         else:
-            with open(Config.SIM_DIR_LIST[number] + 'locations.yaml', 'r') as loc_file:
+            with open(self.config.SIM_DIR_LIST[number] + 'locations.yaml', 'r') as loc_file:
                 self.locations = yaml.load(loc_file)
 
         # RL rewards
@@ -43,7 +43,7 @@ class Commander:
 
         # Agent actions
         self.action_space = ('left', 'right', 'forward')  #  'backward'
-        self.state_space_size = Config.STATE_SHAPE  # for now RGB
+        self.state_space_size = self.config.STATE_SHAPE  # for now RGB
         self.speed = 20.0  # cm/step
 
         self.episode_finished = False
@@ -55,7 +55,7 @@ class Commander:
         self.should_stop = False
         self.mode = mode
         if self.mode == 'test':
-            self.client = Client((Config.HOST, Config.PORT + number))
+            self.client = Client((self.config.HOST, self.config.PORT + number))
             self.client.connect()
         else:
             while not self.start_sim():
@@ -80,13 +80,13 @@ class Commander:
             # self.shut_down()
             self.sim.terminate()
         self.port += 1
-        ucv_utils.set_port(self.port, Config.SIM_DIR_LIST[self.number])
+        ucv_utils.set_port(self.port, self.config.SIM_DIR_LIST[self.number], self.config)
         time.sleep(2)
         print('[{}] Connection attempt on PORT {}.'.format(self.name, self.port))
         with open(os.devnull, 'w') as fp:   # Sim messages on stdout are discarded
-            self.sim = subprocess.Popen(Config.SIM_DIR_LIST[self.number] + Config.SIM_NAME, stdout=fp)
+            self.sim = subprocess.Popen(self.config.SIM_DIR_LIST[self.number] + self.config.SIM_NAME, stdout=fp)
         time.sleep(5)
-        self.client = Client((Config.HOST, self.port))
+        self.client = Client((self.config.HOST, self.port))
         time.sleep(2)
         self.client.connect()
         time.sleep(2)
@@ -308,8 +308,8 @@ class Commander:
         collision_at_start = True
         while collision_at_start:
             # spawn location is ok, if we can move forward a bit without colliding
-            start_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
-            start_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+            start_x = randint(self.config.MAP_X_MIN, self.config.MAP_X_MAX)
+            start_y = randint(self.config.MAP_Y_MIN, self.config.MAP_Y_MAX)
             self.request('vset /camera/0/pose {} {} {} {} {} {}'.format(start_x, start_y, 150, 0, heading, 0))
             step = 50
             small_step_forward = (start_x + step * math.cos(math.radians(heading)),
@@ -331,16 +331,16 @@ class Commander:
 
         # choose random respawn and goal locations, either randomly or from a list of predetermined locations
         random_heading = (0.0, randint(0, 360), 0.0)
-        if Config.RANDOM_SPAWN_LOCATIONS:
-            if Config.TRAIN_MODE:
-                goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
-                goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+        if self.config.RANDOM_SPAWN_LOCATIONS:
+            if self.config.TRAIN_MODE:
+                goal_x = randint(self.config.MAP_X_MIN, self.config.MAP_X_MAX)
+                goal_y = randint(self.config.MAP_Y_MIN, self.config.MAP_Y_MAX)
                 start_x, start_y = self.random_start_location(random_heading[1])
             else:
-                goal_x = Config.EVAL_GOAL_X
-                goal_y = Config.EVAL_GOAL_Y
-                start_x = Config.EVAL_START_X
-                start_y = Config.EVAL_START_Y
+                goal_x = self.config.EVAL_GOAL_X
+                goal_y = self.config.EVAL_GOAL_Y
+                start_x = self.config.EVAL_START_X
+                start_y = self.config.EVAL_START_Y
             start_loc = (start_x, start_y, 150)
             self.goal_location = (goal_x, goal_y, 150)
         else:

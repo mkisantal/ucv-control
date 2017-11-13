@@ -4,7 +4,6 @@ import tensorflow.contrib.slim as slim
 import tensorflow.contrib.rnn as rnn
 import scipy.signal
 from command import Commander
-from config import Config
 
 
 def normalized_columns_initializer(std=1.0):
@@ -34,12 +33,12 @@ class ACNetwork:
 
     """ Actor-Critic Network Class """
 
-    def __init__(self, scope, trainer):
+    def __init__(self, scope, trainer, config):
 
         # Graph Definition
         with tf.variable_scope(scope):
             # input image
-            self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)
+            self.inputs = tf.placeholder(shape=[None]+config.STATE_SHAPE, dtype=tf.float32)
 
             # one-hot depth labels for each depth pixel
             self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
@@ -69,7 +68,7 @@ class ACNetwork:
             self.state_init = [c_init, h_init]
             c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
             h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            if Config.GOAL_ON:
+            if config.GOAL_ON:
                 rnn_in = tf.expand_dims(tf.concat((hidden, self.direction_input), axis=1), [0])  # goal direction input
             else:
                 rnn_in = tf.expand_dims(hidden, [0])
@@ -86,7 +85,7 @@ class ACNetwork:
             rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 
             # output layers
-            self.policy = slim.fully_connected(rnn_out, Config.ACTIONS,
+            self.policy = slim.fully_connected(rnn_out, config.ACTIONS,
                                                activation_fn=tf.nn.softmax,
                                                weights_initializer=normalized_columns_initializer(0.01),
                                                biases_initializer=None)
@@ -97,7 +96,7 @@ class ACNetwork:
                                               )
 
             # auxiliary outputs
-            if Config.AUX_TASK_D2:
+            if config.AUX_TASK_D2:
                 self.aux_depth2_hidden = slim.fully_connected(rnn_out, 128, activation_fn=tf.nn.elu)
                 self.aux_depth2_logits = [
                     slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
@@ -106,7 +105,7 @@ class ACNetwork:
             # loss functions
             if scope != 'global':
                 self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
-                self.actions_onehot = tf.one_hot(self.actions, Config.ACTIONS, dtype=tf.float32)
+                self.actions_onehot = tf.one_hot(self.actions, config.ACTIONS, dtype=tf.float32)
                 self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
                 self.advantages = tf.placeholder(shape=[None], dtype=tf.float32)
 
@@ -118,7 +117,7 @@ class ACNetwork:
                 loss_array = [0.5 * self.value_loss, -0.01 * self.entropy, self.policy_loss]
 
                 # Auxiliary Loss Functions
-                if Config.AUX_TASK_D2:
+                if config.AUX_TASK_D2:
                     self.aux_depth2_losses = [tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
                         labels=self.aux_depth_labels[i], logits=self.aux_depth2_logits[i])) for i in range(4 * 16)]
                     self.aux_depth2_loss = tf.add_n(self.aux_depth2_losses)
@@ -140,10 +139,11 @@ class Worker:
 
     """ A3C agent, optionally augmented with aux tasks """
 
-    def __init__(self, name, trainer, global_episodes, cumulative_steps):
+    def __init__(self, name, trainer, global_episodes, cumulative_steps, config):
         self.name = 'worker_' + str(name)
         self.number = name
-        self.model_path = Config.MODEL_PATH
+        self.config = config
+        self.model_path = self.config.MODEL_PATH
         self.trainer = trainer
         self.global_episodes = global_episodes
         self.increment = global_episodes.assign_add(1)
@@ -152,8 +152,8 @@ class Worker:
         self.episode_lengths = []
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
-        self.env = Commander(self.number)   # RL training (the 'game')
-        self.local_AC = ACNetwork(self.name, trainer)
+        self.env = Commander(self.number, self.config)   # RL training (the 'game')
+        self.local_AC = ACNetwork(self.name, trainer, self.config)
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
         self.batch_rnn_state_init = None
@@ -169,9 +169,9 @@ class Worker:
         rewards = rollout[:, 2]
         next_observations = rollout[:, 3]
         values = rollout[:, 5]
-        if Config.AUX_TASK_D2:
+        if self.config.AUX_TASK_D2:
             aux_depth = rollout[:, 6]
-        if Config.GOAL_ON:
+        if self.config.GOAL_ON:
             goal_vector = np.vstack(gv for gv in rollout[:, -1])    # TODO: won't work with more aux tasks or additional inputs
         identity = np.eye(8)
 
@@ -199,13 +199,13 @@ class Worker:
                        self.local_AC.apply_grads]
 
         # if training with auxiliary tasks, augment feed_dict and loss ops
-        if Config.AUX_TASK_D2:
+        if self.config.AUX_TASK_D2:
             depth_list = [np.vstack(identity[batch, :] for batch in px) for px in np.transpose(aux_depth)]
             depth_labels = np.swapaxes(np.array(depth_list), 0, 1)
             feed_dict.update({self.local_AC.aux_depth_labels[px]: depth_labels[px] for px in range(4*16)})
             ops_for_run.insert(3, self.local_AC.aux_depth2_loss)
             # v_l, p_l, e_l, ad2_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
-        if Config.GOAL_ON:
+        if self.config.GOAL_ON:
             feed_dict.update({self.local_AC.direction_input: goal_vector})
             # v_l, p_l, e_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
 
@@ -240,9 +240,9 @@ class Worker:
                 self.env.new_episode()
                 s = self.env.get_observation()
                 episode_frames.append(s)
-                if Config.AUX_TASK_D2:
+                if self.config.AUX_TASK_D2:
                     aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
-                if Config.GOAL_ON:
+                if self.config.GOAL_ON:
                     goal_direction = self.env.get_goal_direction()
                 rnn_state = self.local_AC.state_init
                 self.batch_rnn_state_init = rnn_state
@@ -254,7 +254,7 @@ class Worker:
                     feed_dict = {self.local_AC.inputs: [s],
                                  self.local_AC.state_in[0]: rnn_state[0],
                                  self.local_AC.state_in[1]: rnn_state[1]}
-                    if Config.GOAL_ON:
+                    if self.config.GOAL_ON:
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
                     a_dist, v, rnn_state = sess.run([self.local_AC.policy,
                                                      self.local_AC.value,
@@ -274,10 +274,10 @@ class Worker:
                         s1 = s
 
                     episode_experiences = [s, a, r, s1, d, v[0, 0]]
-                    if Config.AUX_TASK_D2:
+                    if self.config.AUX_TASK_D2:
                         aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
                         episode_experiences.append(aux_depth)
-                    if Config.GOAL_ON:
+                    if self.config.GOAL_ON:
                         goal_direction = self.env.get_goal_direction()
                         episode_experiences.append(goal_direction)
                     episode_buffer.append(episode_experiences)
@@ -289,19 +289,20 @@ class Worker:
                     episode_step_count += 1
 
                     # running training step at the end of episode
-                    if (len(episode_buffer) == Config.STEPS_FOR_UPDATE) or d or (episode_step_count == Config.MAX_EPISODE_LENGTH):
+                    if (len(episode_buffer) == self.config.STEPS_FOR_UPDATE) or d or\
+                            (episode_step_count == self.config.MAX_EPISODE_LENGTH):
                         # bootstrap value from the last step for return calculation
                         feed_dict_v = {self.local_AC.inputs: [s],
                                        self.local_AC.state_in[0]: rnn_state[0],
                                        self.local_AC.state_in[1]: rnn_state[1]}
-                        if Config.GOAL_ON:
+                        if self.config.GOAL_ON:
                             feed_dict_v.update({self.local_AC.direction_input: goal_direction})
                         v1 = sess.run(self.local_AC.value,
                                       feed_dict=feed_dict_v)
-                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, Config.GAMMA, sess)
+                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, self.config.GAMMA, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
-                    if d or (episode_step_count == Config.MAX_EPISODE_LENGTH):
+                    if d or (episode_step_count == self.config.MAX_EPISODE_LENGTH):
                         break
 
                 # Summary writing, model saving, etc.
@@ -310,13 +311,13 @@ class Worker:
                 self.episode_mean_values.append(np.mean(episode_values))
 
                 if len(episode_buffer) != 0:
-                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, Config.GAMMA, sess)
+                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, self.config.GAMMA, sess)
 
                 if episode_count % 5 == 0 and episode_step_count != 0:
-                    if episode_count % Config.MODEL_SAVE_FREQ == 0 and self.name == 'worker_0':
+                    if episode_count % self.config.MODEL_SAVE_FREQ == 0 and self.name == 'worker_0':
                         saver.save(sess, self.model_path+'/model-'+str(episode_count)+'.cptk')
 
-                    if Config.VERBOSITY == 1:
+                    if self.config.VERBOSITY == 1:
                         if episode_count % 100 == 0:
                             print('[{}] completed {} episodes.'.format(self.name, episode_count))
 
@@ -338,7 +339,7 @@ class Worker:
                 if self.name == 'worker_0':
                     sess.run(self.increment)
                     print('--- worker_0 {}'.format(episode_count))
-                    if episode_count > Config.MAX_EPISODES:
+                    if episode_count > self.config.MAX_EPISODES:
                         coord.request_stop()
                 episode_count += 1
 
@@ -352,13 +353,14 @@ class Player:
 
     """ A3C Agent for evaluation. """
 
-    def __init__(self, number):
+    def __init__(self, number, config):
+        self.config = config
         self.number = number
         self.name = 'player_' + str(number)
         print('Initializing {} ...'.format(self.name))
-        self.local_AC = ACNetwork('player_{}'.format(self.number), None)
+        self.local_AC = ACNetwork('player_{}'.format(self.number), None, self.config)
         self.update_local_ops = update_target_graph('global', 'player_{}'.format(self.number))
-        self.env = Commander(self.number)
+        self.env = Commander(self.number, self.config)
         self.actions = self.env.action_space
         self.episode_count = 0
         self.steps = 0
@@ -383,11 +385,11 @@ class Player:
                 feed_dict = {self.local_AC.inputs: [self.env.get_observation()],
                              self.local_AC.state_in[0]: self.local_AC.state_init[0],
                              self.local_AC.state_in[1]: self.local_AC.state_init[1]}
-                if Config.GOAL_ON:
+                if self.config.GOAL_ON:
                     goal_direction = self.env.get_goal_direction()
                     feed_dict.update({self.local_AC.direction_input: goal_direction})
 
-                if Config.AUX_TASK_D2:
+                if self.config.AUX_TASK_D2:
                     self.env.get_observation(viewmode='depth')
                     pass
 
@@ -398,7 +400,7 @@ class Player:
                 reward = self.env.action(self.actions[a])
                 self.steps += 1
 
-                if self.steps > Config.MAX_EVALUATION_EPISODE_LENGTH:
+                if self.steps > self.config.MAX_EVALUATION_EPISODE_LENGTH:
                     self.steps = 0
                     self.episode_count += 1
                     print('[{}]:{} Max episode length reached.'.format(self.name, self.episode_count))
