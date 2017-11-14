@@ -13,7 +13,7 @@ class Configuration:
         self.MAX_EPISODES = episodes  # absolute episode count, for training
 
         # ---------------------------------------------------------------
-        # SET THE PARAMETERS BELOW PARAMETERS MANUALLY
+        # SET THE PARAMETERS BELOW MANUALLY
         # Training Settings
         self.LOAD_MODEL = False
         self.MODEL_PATH = './model'
@@ -31,6 +31,8 @@ class Configuration:
 
         # Auxiliary tasks
         self.AUX_TASK_D2 = True
+        if mode == 'eval':
+            self.AUX_TASK_D2 = False    # no aux task(s) for evaluation
 
         # Evaluation settings
         self.MAX_EVALUATION_EPISODE_LENGTH = 750
