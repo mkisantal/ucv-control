@@ -389,11 +389,11 @@ class Commander:
 
         """ Save trajectory for evaluation. """
 
-        filename = './trajectory_{}.yaml'.format(self.name)
-        with open(filename, 'a+') as trajectory_file:
-            traj_dict = {'traj': self.trajectory,
-                         'goal': [float(self.goal_location[0]), float(self.goal_location[1])],
-                         }  # TODO: add rewards
+        filename = './trajectory_log.yaml'
+        traj_dict = {'traj': self.trajectory,
+                     'goal': [float(self.goal_location[0]), float(self.goal_location[1])],
+                     }  # TODO: add rewards
+        with open(filename, 'a') as trajectory_file:
             yaml.dump([traj_dict], stream=trajectory_file, default_flow_style=False)
 
 

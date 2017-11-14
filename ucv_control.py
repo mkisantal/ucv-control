@@ -89,20 +89,20 @@ def main(mode, episodes):
                 player_threads.append(t)
 
             eval_finished = False
-            finished_episodes = 0
+            started_episodes = 0
             while not eval_finished:
                 try:
                     sleep(0.1)
                     # check episodes
-                    episode_count = 0
+                    started_episode_count = 0
                     for player in players:
-                        episode_count += player.episode_count
-                    if episode_count > finished_episodes:
-                        finished_episodes = episode_count
-                        print('Finished {} episodes.'.format(finished_episodes))
-                    if episode_count > config.MAX_EPISODES_FOR_EVAL-1:
+                        started_episode_count += player.episodes_started
+                    if started_episode_count > started_episodes:
+                        started_episodes = started_episode_count
+                        print('Started {} episodes.'.format(started_episodes))
+                    if started_episode_count > config.MAX_EPISODES_FOR_EVAL-1:
                         # terminate threads
-                        print('Terminating evaluation after {} finished episodes.'.format(finished_episodes))
+                        print('All {} episodes started.'.format(started_episodes))
                         # for player in players:
                         #     player.should_stop = True
                         coord.request_stop()
@@ -113,6 +113,27 @@ def main(mode, episodes):
                     # for player in players:
                     #     player.should_stop = True
                     coord.request_stop()
+
+            # waiting for all episode to be finished
+            all_episodes_finished = False
+            while not all_episodes_finished:
+                finished_episode_count = 0
+                for player in players:
+                    finished_episode_count += player.episodes_finished
+                if finished_episode_count == config.MAX_EPISODES_FOR_EVAL:
+                    all_episodes_finished = True
+                else:
+                    print('Waiting for {} episodes to finish.'.format(config.MAX_EPISODES_FOR_EVAL -
+                                                                      finished_episode_count))
+                sleep(10)
+
+            crashes = 0
+            terminations = 0
+            for player in players:
+                crashes += player.crashes
+                terminations += player.terminations
+            print('\n Episodes ended with crash {} times, and were terminated after {} steps {} times.\n'.format(
+                crashes, config.MAX_EVALUATION_EPISODE_LENGTH, terminations))
             coord.join(player_threads)
             for player in players:
                 player.env.shut_down()

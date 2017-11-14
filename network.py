@@ -362,11 +362,14 @@ class Player:
         self.update_local_ops = update_target_graph('global', 'player_{}'.format(self.number))
         self.env = Commander(self.number, self.config)
         self.actions = self.env.action_space
-        self.episode_count = 0
+        self.episodes_started = 0
+        self.episodes_finished = 0
         self.steps = 0
         self.rnn_state = None
         self.s = None
         self.stop_requested = False
+        self.crashes = 0
+        self.terminations = 0
 
         print('[{}] initialization done.'.format(self.name))
 
@@ -377,48 +380,45 @@ class Player:
 
             # evaluation loop
             while not coordinator.should_stop():
-                if self.s is None or self.rnn_state is None:
-                    # first step
-                    self.s = self.env.get_observation()
-                    self.rnn_state = self.local_AC.state_init
 
-                feed_dict = {self.local_AC.inputs: [self.env.get_observation()],
-                             self.local_AC.state_in[0]: self.local_AC.state_init[0],
-                             self.local_AC.state_in[1]: self.local_AC.state_init[1]}
-                if self.config.GOAL_ON:
-                    goal_direction = self.env.get_goal_direction()
-                    feed_dict.update({self.local_AC.direction_input: goal_direction})
+                finished_episode = False
+                self.s = self.env.get_observation()
+                self.rnn_state = self.local_AC.state_init
+                self.steps = 0
+                self.episodes_started += 1
 
-                if self.config.AUX_TASK_D2:
-                    self.env.get_observation(viewmode='depth')
-                    pass
+                # episode loop
+                while not finished_episode:
+                    feed_dict = {self.local_AC.inputs: [self.env.get_observation()],
+                                 self.local_AC.state_in[0]: self.local_AC.state_init[0],
+                                 self.local_AC.state_in[1]: self.local_AC.state_init[1]}
+                    if self.config.GOAL_ON:
+                        goal_direction = self.env.get_goal_direction()
+                        feed_dict.update({self.local_AC.direction_input: goal_direction})
 
-                # running inference on network, action selection
-                a_dist, self.rnn_state = session.run([self.local_AC.policy, self.local_AC.state_out], feed_dict=feed_dict)
-                a = np.argmax(a_dist)
+                    if self.config.AUX_TASK_D2:
+                        self.env.get_observation(viewmode='depth')
+                        pass
 
-                reward = self.env.action(self.actions[a])
-                self.steps += 1
+                    # running inference on network, action selection
+                    a_dist, self.rnn_state = session.run([self.local_AC.policy, self.local_AC.state_out], feed_dict=feed_dict)
+                    a = np.argmax(a_dist)
 
-                if self.steps > self.config.MAX_EVALUATION_EPISODE_LENGTH:
-                    self.steps = 0
-                    self.episode_count += 1
-                    print('[{}]:{} Max episode length reached.'.format(self.name, self.episode_count))
-                    self.env.new_episode(save_trajectory=True)
-                    self.rnn_state = None
-                    self.s = None
+                    reward = self.env.action(self.actions[a])
+                    self.steps += 1
 
-                if self.env.is_episode_finished():
-                    self.episode_count += 1
-                    print('[{}]:{} Collision.'.format(self.name, self.episode_count))
-                    self.env.new_episode(save_trajectory=True)
-                    self.steps = 0
-                    self.rnn_state = None
-                    self.s = None
-                    self.s = self.env.get_observation()
+                    if self.steps > self.config.MAX_EVALUATION_EPISODE_LENGTH:
+                        self.env.new_episode(save_trajectory=True)
+                        self.terminations += 1
+                        finished_episode = True
 
+                    if self.env.is_episode_finished():
+                        self.env.new_episode(save_trajectory=True)
+                        self.crashes += 1
+                        finished_episode = True
+                self.episodes_finished += 1
 
-
+            self.env.shut_down()
 
 
 
