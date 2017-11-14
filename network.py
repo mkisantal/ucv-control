@@ -152,7 +152,7 @@ class Worker:
         self.episode_lengths = []
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
-        self.env = Commander(self.number, self.config)   # RL training (the 'game')
+        self.env = Commander(self.number, self.config, self.name)   # RL training (the 'game')
         self.local_AC = ACNetwork(self.name, trainer, self.config)
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
@@ -360,7 +360,7 @@ class Player:
         print('Initializing {} ...'.format(self.name))
         self.local_AC = ACNetwork('player_{}'.format(self.number), None, self.config)
         self.update_local_ops = update_target_graph('global', 'player_{}'.format(self.number))
-        self.env = Commander(self.number, self.config)
+        self.env = Commander(self.number, self.config, self.name)
         self.actions = self.env.action_space
         self.episodes_started = 0
         self.episodes_finished = 0

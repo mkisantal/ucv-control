@@ -18,10 +18,10 @@ class Commander:
 
     """ Class for interacting with an UE4 Game packaged with the UnrealCV plugin"""
 
-    def __init__(self, number, config, mode=None):
+    def __init__(self, number, config, name, mode=None):
         self.config = config
         self.trajectory = []
-        self.name = 'worker_' + str(number)
+        self.name = name
         self.port = 7000 + number * 100
         self.number = number
 
@@ -389,7 +389,7 @@ class Commander:
 
         """ Save trajectory for evaluation. """
 
-        filename = './trajectory_log.yaml'
+        filename = './trajectory_{}.yaml'.format(self.name)
         traj_dict = {'traj': self.trajectory,
                      'goal': [float(self.goal_location[0]), float(self.goal_location[1])],
                      }  # TODO: add rewards
