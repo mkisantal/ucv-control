@@ -5,6 +5,7 @@ import time
 import math
 import yaml
 import numpy as np
+from config import Configuration
 
 # COORDINATES ARE INVERTED!!!
 # as UE4 uses left-handed coordinate system
@@ -135,17 +136,24 @@ def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, s
 
 if __name__ == '__main__':
 
-    # loading trajectory file
-    filename = './trajectory_{}.yaml'.format('worker_0')
-    with open(filename, 'a+') as trajectory_file:
-        trajectories = yaml.load(trajectory_file)
+    config = Configuration('eval', 0)
+
+    # loading trajectory files
+    trajectories = []
+    for i in range(config.NUM_WORKERS):
+        filename = './trajectory_player_{}.yaml'.format(i)
+        print('loading trajectory_player_{}.yaml'.format(i))
+        with open(filename, 'r') as trajectory_file:
+            data = yaml.load(trajectory_file)
+        for trajectory in data:
+            trajectories.append(trajectory)
 
     fig = plt.figure()
     ax = fig.add_subplot(111, aspect='equal')
     plt.ion()
     plt.show()
-    draw_labyrinth(ax)
-    # draw_forest(ax)
+    # draw_labyrinth(ax)
+    draw_forest(ax)
 
     counter = 0
     for trajectory in trajectories:
