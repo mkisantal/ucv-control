@@ -29,6 +29,11 @@ class Configuration:
         self.NUM_WORKERS = 8
         self.GOAL_ON = True
 
+        # RL rewards
+        self.GOAL_DIRECTION_REWARD = 1.0
+        self.CRASH_REWARD = -10.0
+        self.CONTROL_EFFORT_REWARD_MULTIPLIER = -1.0 / 100
+
         # Auxiliary tasks
         self.AUX_TASK_D2 = True
         if mode == 'eval':

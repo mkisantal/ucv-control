@@ -37,11 +37,6 @@ class Commander:
             with open(self.config.SIM_DIR_LIST[number] + 'locations.yaml', 'r') as loc_file:
                 self.locations = yaml.load(loc_file)
 
-        # RL rewards
-        self.goal_direction_reward = 1.0
-        self.crash_reward = -10.0
-        self.control_effort_reward_multiplier = -1.0/100
-
         # Agent actions
         self.action_space = ('ang_acc_left', 'ang_acc_right', 'ang_acc_forward')  # each has to be defined in action()
         self.state_space_size = self.config.STATE_SHAPE  # for now RGB
@@ -143,7 +138,7 @@ class Commander:
         else:
             raise ValueError('Unknown action [{}]'.format(cmd))
 
-        control_effort_reward = abs(self.angular_speed_state) * self.control_effort_reward_multiplier
+        control_effort_reward = abs(self.angular_speed_state) * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
         movement_reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # acting
         total_reward = movement_reward + control_effort_reward
         return total_reward
@@ -247,12 +242,12 @@ class Commander:
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
         if relative:
-            movement_reward = self.displacement_reward(displacement, collision)
+            movement_reward = self.displacement_reward(displacement)
         else:
             movement_reward = 0
 
         if collision:
-            movement_reward += self.crash_reward
+            movement_reward += self.config.CRASH_REWARD
             self.episode_finished = True
 
         return movement_reward
@@ -267,7 +262,7 @@ class Commander:
         disp = np.array(displacement)
         goal_distance = np.linalg.norm(np.subtract(loc, self.goal_location))
         if goal_distance < 200.0:  # closer than 2 meter to the goal
-            return self.goal_direction_reward  # TODO: terminate episode!
+            return self.config.GOAL_DIRECTION_REWARD  # TODO: terminate episode!
         norm_displacement = np.array(displacement) / self.speed
         norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
                            / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
