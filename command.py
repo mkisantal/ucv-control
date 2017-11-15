@@ -42,9 +42,12 @@ class Commander:
         self.crash_reward = -10.0
 
         # Agent actions
-        self.action_space = ('left', 'right', 'forward')  #  'backward'
+        self.action_space = ('ang_acc_left', 'ang_acc_right', 'ang_acc_forward')  # each has to be defined in action()
         self.state_space_size = self.config.STATE_SHAPE  # for now RGB
-        self.speed = 20.0  # cm/step
+        self.speed = 40.0  # cm/step    # TODO: move these to config
+        self.angular_speed_state = 0
+        self.angular_acc = 5  # deg/step
+        self.max_angular_speed = 15  # deg/step
 
         self.episode_finished = False
         self.should_terminate = False
@@ -121,6 +124,23 @@ class Commander:
         elif cmd == 'backward':
             # move(loc_cmd=-speed)
             loc_cmd[0] = -self.speed
+        elif cmd == 'ang_acc_left':
+            loc_cmd[0] = self.speed
+            self.angular_speed_state -= self.angular_acc
+            if abs(self.angular_speed_state) > self.max_angular_speed:
+                self.angular_speed_state = -self.max_angular_speed
+            rot_cmd[1] = self.angular_speed_state
+        elif cmd == 'ang_acc_right':
+            loc_cmd[0] = self.speed
+            self.angular_speed_state += self.angular_acc
+            if abs(self.angular_speed_state) > self.max_angular_speed:
+                self.angular_speed_state = self.max_angular_speed
+            rot_cmd[1] = self.angular_speed_state
+        elif cmd == 'ang_acc_forward':
+            loc_cmd[0] = self.speed
+            rot_cmd[1] = self.angular_speed_state
+        else:
+            raise ValueError('Unknown action [{}]'.format(cmd))
 
         reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)
         return reward
