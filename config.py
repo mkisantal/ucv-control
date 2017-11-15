@@ -10,7 +10,7 @@ class Configuration:
         else:
             raise ValueError('Mode has to be either \'train\' or \'eval\'')
 
-        self.MAX_EPISODES = episodes  # absolute episode count, for training
+        self.MAX_EPISODES = int(episodes)  # absolute episode count, for training
 
         # ---------------------------------------------------------------
         # SET THE PARAMETERS BELOW MANUALLY
@@ -28,6 +28,7 @@ class Configuration:
         self.ACTIONS = 3
         self.NUM_WORKERS = 8
         self.GOAL_ON = True
+        self.ACCELERATION_ACTIONS = True
 
         # RL rewards
         self.GOAL_DIRECTION_REWARD = 1.0

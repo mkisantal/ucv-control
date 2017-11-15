@@ -38,7 +38,10 @@ class Commander:
                 self.locations = yaml.load(loc_file)
 
         # Agent actions
-        self.action_space = ('ang_acc_left', 'ang_acc_right', 'ang_acc_forward')  # each has to be defined in action()
+        if config.ACCELERATION_ACTIONS:
+            self.action_space = ('ang_acc_left', 'ang_acc_right', 'ang_acc_forward')  # each has to be defined in action()
+        else:
+            self.action_space = ('left', 'right', 'forward')
         self.state_space_size = self.config.STATE_SHAPE  # for now RGB
         self.speed = 40.0  # cm/step    # TODO: move these to config
         self.angular_speed_state = 0
@@ -138,9 +141,15 @@ class Commander:
         else:
             raise ValueError('Unknown action [{}]'.format(cmd))
 
-        control_effort_reward = abs(self.angular_speed_state) * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
-        movement_reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # acting
-        total_reward = movement_reward + control_effort_reward
+        total_reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # acting
+
+        if self.config.ACCELERATION_ACTIONS:
+            control_effort_reward = abs(self.angular_speed_state) * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
+            total_reward += control_effort_reward
+        else:
+            # control effort reward is not implemented for simple turning actions
+            pass
+
         return total_reward
 
     # def sim_command(self, cmd):
@@ -256,7 +265,6 @@ class Commander:
 
         """ Calculate reward based on displacement and collision. """
 
-        reward = 0
         loc = np.array(self.trajectory[-1]['location'])
         prev_loc = np.array(self.trajectory[-2]['location'])
         disp = np.array(displacement)
@@ -266,9 +274,7 @@ class Commander:
         norm_displacement = np.array(displacement) / self.speed
         norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
                            / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
-        reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
-
-        return reward
+        return np.dot(norm_goal_vector, norm_displacement) * self.config.GOAL_DIRECTION_REWARD
 
     @staticmethod
     def _read_npy(res):
@@ -403,6 +409,9 @@ class Commander:
         # sin(heading_error) is sufficient for directional input
         relative = math.sin(math.radians(goal - hdg))
         return np.expand_dims(np.expand_dims(relative, 0), 0)
+
+    def get_velocity_state(self):
+        return np.expand_dims(np.expand_dims(self.angular_speed_state, 0), 0)
 
     def save_trajectory(self):
 
