@@ -1,4 +1,3 @@
-import network as net
 import tensorflow as tf
 import os
 import threading
@@ -6,6 +5,8 @@ from time import sleep
 from logger import TestLogger, CumulativeStepsLogger
 from config import Configuration
 from tensorflow.contrib import slim
+import network as net
+
 
 def main(mode, episodes):
     config = Configuration(mode, episodes)
@@ -41,12 +42,11 @@ def main(mode, episodes):
         coord = tf.train.Coordinator()
 
         # weight initialization
+        sess.run(tf.global_variables_initializer())
         if config.LOAD_MODEL or not config.TRAIN_MODE:
             print('Loading model...')
             ckpt = tf.train.get_checkpoint_state(model_path)
             saver.restore(sess, ckpt.model_checkpoint_path)
-        else:
-            sess.run(tf.global_variables_initializer())
 
         if config.TRAIN_MODE:
             # starting logger threads
