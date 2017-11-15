@@ -2,6 +2,8 @@ from __future__ import print_function
 import os
 from subprocess import Popen
 from time import sleep
+import os
+import errno
 
 
 def set_port(port, sim_dir, config):
@@ -18,4 +20,15 @@ def set_port(port, sim_dir, config):
             sim = Popen(config.SIM_DIR + config.SIM_NAME, stdout=fp)
         sleep(5)
         sim.terminate()
-        set_port(port, sim_dir)
+        set_port(port, sim_dir, config)
+
+
+def remove_file(fname):
+
+    """ Remove file, if it exist. """
+    
+    try:
+        os.remove(fname)
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise

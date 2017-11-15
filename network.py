@@ -3,6 +3,7 @@ import tensorflow as tf
 import tensorflow.contrib.slim as slim
 import tensorflow.contrib.rnn as rnn
 import scipy.signal
+import ucv_utils
 from command import Commander
 
 
@@ -354,10 +355,10 @@ class Player:
     """ A3C Agent for evaluation. """
 
     def __init__(self, number, config):
-        self.config = config
-        self.number = number
         self.name = 'player_' + str(number)
         print('Initializing {} ...'.format(self.name))
+        self.config = config
+        self.number = number
         self.local_AC = ACNetwork('player_{}'.format(self.number), None, self.config)
         self.update_local_ops = update_target_graph('global', 'player_{}'.format(self.number))
         self.env = Commander(self.number, self.config, self.name)
@@ -370,6 +371,9 @@ class Player:
         self.stop_requested = False
         self.crashes = 0
         self.terminations = 0
+
+        # remove previous trajectory logs to avoid unintentional appending
+        ucv_utils.remove_file('./trajectory_{}.yaml'.format(self.name))
 
         print('[{}] initialization done.'.format(self.name))
 
