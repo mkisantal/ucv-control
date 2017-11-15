@@ -40,6 +40,7 @@ class Commander:
         # RL rewards
         self.goal_direction_reward = 1.0
         self.crash_reward = -10.0
+        self.control_effort_reward_multiplier = -1.0/100
 
         # Agent actions
         self.action_space = ('ang_acc_left', 'ang_acc_right', 'ang_acc_forward')  # each has to be defined in action()
@@ -142,8 +143,10 @@ class Commander:
         else:
             raise ValueError('Unknown action [{}]'.format(cmd))
 
-        reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)
-        return reward
+        control_effort_reward = abs(self.angular_speed_state) * self.control_effort_reward_multiplier
+        movement_reward = self.move(loc_cmd=loc_cmd, rot_cmd=rot_cmd)  # acting
+        total_reward = movement_reward + control_effort_reward
+        return total_reward
 
     # def sim_command(self, cmd):
     #     if cmd == 'save_view':
@@ -244,15 +247,19 @@ class Commander:
         self.trajectory.append(dict(location=new_loc, rotation=new_rot))
 
         if relative:
-            reward = self.calculate_reward(displacement, collision)
+            movement_reward = self.displacement_reward(displacement, collision)
         else:
-            reward = 0
+            movement_reward = 0
 
-        return reward
+        if collision:
+            movement_reward += self.crash_reward
+            self.episode_finished = True
 
-    def calculate_reward(self, displacement, collision=False):
+        return movement_reward
 
-        """ Calculate displacement based on displacement and collision. """
+    def displacement_reward(self, displacement):
+
+        """ Calculate reward based on displacement and collision. """
 
         reward = 0
         loc = np.array(self.trajectory[-1]['location'])
@@ -265,9 +272,6 @@ class Commander:
         norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
                            / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
         reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
-        if collision:
-            reward += self.crash_reward
-            self.episode_finished = True
 
         return reward
 
