@@ -17,7 +17,8 @@ class Configuration:
         # Training Settings
         self.LOAD_MODEL = False
         self.MODEL_PATH = './model'
-        self.MODEL_SAVE_FREQ = 25
+        self.MODEL_SAVE_PERIOD = 5 * 10e4
+        self.LOGGING_PERIOD = 500
         self.VERBOSITY = 1
 
         # Basic RL settings

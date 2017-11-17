@@ -143,15 +143,18 @@ class Worker:
 
     """ A3C agent, optionally augmented with aux tasks """
 
-    def __init__(self, name, trainer, global_episodes, cumulative_steps, config):
+    def __init__(self, name, trainer, global_episodes, global_steps, logger_steps, config):
         self.name = 'worker_' + str(name)
         self.number = name
         self.config = config
         self.model_path = self.config.MODEL_PATH
         self.trainer = trainer
         self.global_episodes = global_episodes
-        self.increment = global_episodes.assign_add(1)
-        self.cumulative_steps = cumulative_steps
+        self.increment_episodes = global_episodes.assign_add(1)
+        self.global_steps = global_steps
+        self.local_steps = 0
+        self.increment_steps = global_steps.assign_add(1)
+        self.cumulative_steps = logger_steps
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
@@ -161,6 +164,9 @@ class Worker:
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
         self.batch_rnn_state_init = None
+
+        self.last_model_save_steps = 0
+        self.last_log_writing_steps = 0
 
     def train(self, rollout, bootstrap_value, gamma, sess):
 
@@ -228,7 +234,6 @@ class Worker:
         """ Target function for Thread.run(), policy evaluation on episodes + training """
 
         episode_count = sess.run(self.global_episodes)
-        total_steps = 0
         print('Starting worker ' + str(self.number))
         with sess.as_default(), sess.graph.as_default():
 
@@ -274,6 +279,8 @@ class Worker:
                     a = np.argmax(a_dist == a)
 
                     self.cumulative_steps.increment()
+                    sess.run(self.increment_steps)
+                    self.local_steps += 1
 
                     r = self.env.action(self.actions[a])
                     d = self.env.is_episode_finished()
@@ -298,7 +305,6 @@ class Worker:
 
                     episode_reward += r
                     s = s1
-                    total_steps += 1
                     episode_step_count += 1
 
                     # running training step at the end of episode
@@ -326,14 +332,9 @@ class Worker:
                 if len(episode_buffer) != 0:
                     v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, self.config.GAMMA, sess)
 
-                if episode_count % 5 == 0 and episode_step_count != 0:
-                    if episode_count % self.config.MODEL_SAVE_FREQ == 0 and self.name == 'worker_0':
-                        saver.save(sess, self.model_path+'/model-'+str(episode_count)+'.cptk')
+                steps_since_log = self.local_steps - self.last_log_writing_steps
 
-                    if self.config.VERBOSITY == 1:
-                        if episode_count % 100 == 0:
-                            print('[{}] completed {} episodes.'.format(self.name, episode_count))
-
+                if steps_since_log > self.config.LOGGING_PERIOD:
                     mean_reward = np.mean(self.episode_rewards[-5:])
                     mean_length = np.mean(self.episode_lengths[-5:])
                     mean_value = np.mean(self.episode_mean_values[-5:])
@@ -347,11 +348,20 @@ class Worker:
                     summary.value.add(tag='Losses/Grad Norm', simple_value=float(g_n))
                     summary.value.add(tag='Var Norm', simple_value=float(v_n))
                     self.summary_writer.add_summary(summary, episode_count)
-
                     self.summary_writer.flush()
+
+                    self.last_log_writing_steps = self.local_steps
+
+                current_global_steps = sess.run(self.global_steps)
                 if self.name == 'worker_0':
-                    sess.run(self.increment)
-                    print('--- worker_0 {}'.format(episode_count))
+                    steps_since_save = current_global_steps - self.last_model_save_steps
+                    model_save_step_freq = 100
+                    if steps_since_save > self.config.MODEL_SAVE_PERIOD:
+                        print('--- Saving model at {} global steps'.format(current_global_steps))
+                        self.last_model_save_steps = current_global_steps - (current_global_steps % model_save_step_freq)
+                        saver.save(sess, self.model_path + '/model-' + str(self.last_model_save_steps/1000) + 'k.cptk')
+                    sess.run(self.increment_episodes)
+                    print('--- worker_0 {} episodes, {} global steps'.format(episode_count, current_global_steps))
                     if episode_count > self.config.MAX_EPISODES:
                         coord.request_stop()
                 episode_count += 1
