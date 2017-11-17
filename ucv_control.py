@@ -8,8 +8,8 @@ from tensorflow.contrib import slim
 import network as net
 
 
-def main(mode, episodes):
-    config = Configuration(mode, episodes)
+def main(mode, steps):
+    config = Configuration(mode, steps)
     model_path = config.MODEL_PATH
     tf.reset_default_graph()
 
@@ -24,7 +24,7 @@ def main(mode, episodes):
         trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
         master_network = net.ACNetwork('global', None, config)
         var_to_restore = slim.get_variables_to_restore()  # restore only master network
-        saver = tf.train.Saver(var_to_restore, max_to_keep=1e3)
+        saver = tf.train.Saver(var_to_restore, max_to_keep=1000)
 
         if config.TRAIN_MODE:
             # initializing workers for training
@@ -150,4 +150,4 @@ if __name__ == '__main__':
     parser.add_argument('--steps', help='Number of global steps for running training', default=0)
     args = parser.parse_args()
 
-    main(mode=args.mode, episodes=args.episodes)
+    main(mode=args.mode, steps=args.steps)
