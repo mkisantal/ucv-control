@@ -24,7 +24,7 @@ def main(mode, episodes):
         trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
         master_network = net.ACNetwork('global', None, config)
         var_to_restore = slim.get_variables_to_restore()  # restore only master network
-        saver = tf.train.Saver(var_to_restore)
+        saver = tf.train.Saver(var_to_restore, max_to_keep=1e3)
 
         if config.TRAIN_MODE:
             # initializing workers for training
