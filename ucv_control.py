@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--mode', help='Set either \'train\' or \'eval\'', default='eval')
-    parser.add_argument('--episodes', help='Number of episodes for running training or evaluation', default=0)
+    parser.add_argument('--steps', help='Number of global steps for running training', default=0)
     args = parser.parse_args()
 
     main(mode=args.mode, episodes=args.episodes)

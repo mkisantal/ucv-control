@@ -362,7 +362,7 @@ class Worker:
                         saver.save(sess, self.model_path + '/model-' + str(self.last_model_save_steps/1000) + 'k.cptk')
                     sess.run(self.increment_episodes)
                     print('--- worker_0 {} episodes, {} global steps'.format(episode_count, current_global_steps))
-                    if episode_count > self.config.MAX_EPISODES:
+                    if current_global_steps > self.config.MAX_STEPS:
                         coord.request_stop()
                 episode_count += 1
 

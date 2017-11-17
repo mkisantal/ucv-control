@@ -10,7 +10,7 @@ class Configuration:
         else:
             raise ValueError('Mode has to be either \'train\' or \'eval\'')
 
-        self.MAX_EPISODES = int(episodes)  # absolute episode count, for training
+        self.MAX_STEPS = int(episodes)  # absolute episode count, for training
 
         # ---------------------------------------------------------------
         # SET THE PARAMETERS BELOW MANUALLY
