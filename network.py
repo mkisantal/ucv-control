@@ -359,7 +359,7 @@ class Worker:
                         print('--- Saving model at {} global steps'.format(current_global_steps))
                         self.last_model_save_steps = current_global_steps -\
                             (current_global_steps % self.config.MODEL_SAVE_PERIOD)
-                        saver.save(sess, self.model_path + '/model-' + str(self.last_model_save_steps/1000) + 'k.cptk')
+                        saver.save(sess, self.model_path + '/model-' + str(int(self.last_model_save_steps/1000)) + 'k.cptk')
                     sess.run(self.increment_episodes)
                     print('--- worker_0 {} episodes, {} global steps'.format(episode_count, current_global_steps))
                     if current_global_steps > self.config.MAX_STEPS:
