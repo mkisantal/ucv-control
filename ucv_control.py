@@ -44,7 +44,7 @@ def main(mode, steps):
 
         # weight initialization
         sess.run(tf.global_variables_initializer())
-        if config.LOAD_MODEL or not config.TRAIN_MODE:
+        if (config.LOAD_MODEL or not config.TRAIN_MODE) and os.path.exists(model_path + '/checkpoint'):
             print('Loading model...')
             ckpt = tf.train.get_checkpoint_state(model_path)
             saver.restore(sess, ckpt.model_checkpoint_path)

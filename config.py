@@ -15,9 +15,9 @@ class Configuration:
         # ---------------------------------------------------------------
         # SET THE PARAMETERS BELOW MANUALLY
         # Training Settings
-        self.LOAD_MODEL = False
+        self.LOAD_MODEL = True  # if there is a saved model already
         self.MODEL_PATH = './model'
-        self.MODEL_SAVE_PERIOD = 5 * 10e4
+        self.MODEL_SAVE_PERIOD = 5e4
         self.LOGGING_PERIOD = 500
         self.VERBOSITY = 1
 
