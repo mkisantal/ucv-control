@@ -1,6 +1,6 @@
 
 class Configuration:
-    def __init__(self, mode, episodes):
+    def __init__(self, mode, steps):
 
         # mode selector: training or evaluation
         if mode == 'train':
@@ -10,7 +10,7 @@ class Configuration:
         else:
             raise ValueError('Mode has to be either \'train\' or \'eval\'')
 
-        self.MAX_STEPS = int(episodes)  # absolute episode count, for training
+        self.MAX_STEPS = int(steps)  # absolute episode count, for training
         self.MODEL_NAME = None
 
         # ---------------------------------------------------------------
