@@ -355,10 +355,10 @@ class Worker:
                 current_global_steps = sess.run(self.global_steps)
                 if self.name == 'worker_0':
                     steps_since_save = current_global_steps - self.last_model_save_steps
-                    model_save_step_freq = 100
                     if steps_since_save > self.config.MODEL_SAVE_PERIOD:
                         print('--- Saving model at {} global steps'.format(current_global_steps))
-                        self.last_model_save_steps = current_global_steps - (current_global_steps % model_save_step_freq)
+                        self.last_model_save_steps = current_global_steps -\
+                            (current_global_steps % self.config.MODEL_SAVE_PERIOD)
                         saver.save(sess, self.model_path + '/model-' + str(self.last_model_save_steps/1000) + 'k.cptk')
                     sess.run(self.increment_episodes)
                     print('--- worker_0 {} episodes, {} global steps'.format(episode_count, current_global_steps))
