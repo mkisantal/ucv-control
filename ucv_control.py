@@ -6,6 +6,7 @@ from logger import TestLogger, CumulativeStepsLogger
 from config import Configuration
 from tensorflow.contrib import slim
 import network as net
+import re
 
 
 def main(mode, steps):
@@ -48,7 +49,9 @@ def main(mode, steps):
             print('Loading model...')
             ckpt = tf.train.get_checkpoint_state(model_path)
             saver.restore(sess, ckpt.model_checkpoint_path)
-
+            model_name = re.search('model-.*.cptk', ckpt.model_checkpoint_path).group(0)[6:-5]
+            print('Loaded checkpoint from {} global steps.'.format(model_name))
+            config.MODEL_NAME = model_name
         if config.TRAIN_MODE:
             # starting logger threads
             logger = TestLogger(workers)

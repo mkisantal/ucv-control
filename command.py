@@ -417,7 +417,11 @@ class Commander:
 
         """ Save trajectory for evaluation. """
 
-        filename = './trajectory_{}.yaml'.format(self.name)
+        if not os.path.exists('./TRAJECTORIES'):
+            os.makedirs('./TRAJECTORIES')
+        if not os.path.exists('TRAJECTORIES/{}'.format(self.config.MODEL_NAME)):
+            os.makedirs('TRAJECTORIES/{}'.format(self.config.MODEL_NAME))
+        filename = './TRAJECTORIES/{}/trajectory_{}.yaml'.format(self.config.MODEL_NAME, self.name)
         traj_dict = {'traj': self.trajectory,
                      'goal': [float(self.goal_location[0]), float(self.goal_location[1])],
                      }  # TODO: add rewards

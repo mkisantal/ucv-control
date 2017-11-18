@@ -1,11 +1,8 @@
 import matplotlib.pyplot as plt
-from matplotlib.path import Path
-import matplotlib.patches as patches
-import time
-import math
 import yaml
 import numpy as np
 from config import Configuration
+import os
 
 # COORDINATES ARE INVERTED!!!
 # as UE4 uses left-handed coordinate system
@@ -101,12 +98,10 @@ def interpolate_color(value):
         return 0.5 - 0.5*value, 0, 0.5 + 0.5*value
 
 
-def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, single_trajectories=False, index=None):
+def draw_trajectory(traj, axis, config, show_start=False, show_crash=False, goal=None):
 
-    # if len(traj) < 15:
-    #     return
-
-    print('Drawing trajectory with {} points.'.format(len(traj)))
+    if config.VERBOSITY > 1:
+        print('Drawing trajectory with {} points.'.format(len(traj)))
     x = []
     y = []
 
@@ -126,32 +121,25 @@ def draw_trajectory(traj, axis, show_start=False, show_crash=False, goal=None, s
     if goal is not None:
         axis.plot(goal[1], goal[0], 'yo')
 
-    if single_trajectories:
-        plt.draw()
-        plt.pause(3.0001)
-        fig.savefig('./EVAL/eval_{}.pdf'.format(counter), format='pdf')
-        plt.cla()
-        draw_labyrinth(ax)
 
-
-if __name__ == '__main__':
-
+def main(global_steps):
     config = Configuration('eval', 0)
+    if config.VERBOSITY > 0:
+        print('Evaluation: plotting trajectories...')
 
     # loading trajectory files
     trajectories = []
     for i in range(config.NUM_WORKERS):
-        filename = './trajectory_player_{}.yaml'.format(i)
-        print('loading trajectory_player_{}.yaml'.format(i))
+        filename = './TRAJECTORIES/' + global_steps + '/trajectory_player_{}.yaml'.format(i)
+        if config.VERBOSITY > 1:
+            print('loading trajectory_player_{}.yaml'.format(i))
         with open(filename, 'r') as trajectory_file:
             data = yaml.load(trajectory_file)
-        for trajectory in data:
-            trajectories.append(trajectory)
+        trajectories.extend(data)
 
     fig = plt.figure()
     ax = fig.add_subplot(111, aspect='equal')
     plt.ion()
-    plt.show()
     # draw_labyrinth(ax)
     draw_forest(ax)
 
@@ -161,9 +149,23 @@ if __name__ == '__main__':
         if counter > 50:
             pass
         else:
-            draw_trajectory(trajectory['traj'], ax, show_start=True, show_crash=True, goal=trajectory['goal'], index=counter)
+            draw_trajectory(trajectory['traj'], ax, config, show_start=True, show_crash=True, goal=trajectory['goal'])
 
-    plt.draw()
+    if not os.path.exists('./EVAL'):
+        os.makedirs('./EVAL')
 
-    fig.savefig('./000_trajectory_eval_plot.pdf', format='pdf')
-    plt.pause(30)
+    fig_name = './EVAL/{}.pdf'.format(global_steps)
+    fig.savefig(fig_name, format='pdf')
+    if config.VERBOSITY > 0:
+        print('Evaluation: {} trajectories plotted at {} global steps, saved to {}'.format(counter, global_steps, fig_name))
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--global_steps',
+                        help='Select which set of trajectories to use (i.e. trajectories done at \'50k\' global steps)',
+                        default='50k')
+    args = parser.parse_args()
+
+    main(global_steps=args.global_steps)
