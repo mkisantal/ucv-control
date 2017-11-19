@@ -14,10 +14,14 @@ do
 	echo --------------------------------------------------------
 	echo Restarting training, running \until $i global steps.
 	python2 ucv_control.py --mode='train' --steps=$i
+	kill $(pgrep outdoor_lite)
+	kill -9 $(pgrep outdoor_lite)
 	echo Training done, running evaluation.
 	python2 ucv_control.py --mode='eval' --steps=0
+	kill $(pgrep outdoor_lite)
+	kill -9 $(pgrep outdoor_lite)
 	echo Plotting results.
-	python2 trajectory_plotter --global_steps=$(expr $i / 1000)k
+	python2 trajectory_plotter.py --global_steps=$(expr $i / 1000)k
 done
 
 
