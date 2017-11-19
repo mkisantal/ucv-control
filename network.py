@@ -168,7 +168,7 @@ class Worker:
         self.last_model_save_steps = 0
         self.last_log_writing_steps = 0
 
-    def train(self, rollout, bootstrap_value, gamma, sess):
+    def train(self, rollout, bootstrap_value, gamma, lmbda,  sess):
 
         """ Actor-Critic + Aux task training """
 
@@ -191,8 +191,8 @@ class Worker:
         rewards_plus = np.asarray(rewards.tolist() + [bootstrap_value])
         discounted_rewards = discount(rewards_plus, gamma)[:-1]
         value_plus = np.asarray(values.tolist() + [bootstrap_value])
-        advantages = rewards + gamma * value_plus[1:] - value_plus[:-1]   # GAE?
-        advantages = discount(advantages, gamma)
+        advantages = rewards + gamma * value_plus[1:] - value_plus[:-1]   # Advantage, approximated by TD error
+        advantages = discount(advantages, lmbda)
 
         rnn_state = self.local_AC.state_init
         feed_dict = {self.local_AC.target_v: discounted_rewards,
@@ -310,15 +310,18 @@ class Worker:
                     # running training step at the end of episode
                     if (len(episode_buffer) == self.config.STEPS_FOR_UPDATE) or d or\
                             (episode_step_count == self.config.MAX_EPISODE_LENGTH):
-                        # bootstrap value from the last step for return calculation
-                        feed_dict_v = {self.local_AC.inputs: [s],
-                                       self.local_AC.state_in[0]: rnn_state[0],
-                                       self.local_AC.state_in[1]: rnn_state[1]}
-                        if self.config.GOAL_ON:
-                            feed_dict_v.update({self.local_AC.direction_input: goal_direction})
-                        v1 = sess.run(self.local_AC.value,
-                                      feed_dict=feed_dict_v)
-                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, self.config.GAMMA, sess)
+                        if d:
+                            v1 = 0.0  # episode finished, no bootstrapping needed
+                        else:
+                            # bootstrap value from the last step for return calculation
+                            feed_dict_v = {self.local_AC.inputs: [s],
+                                           self.local_AC.state_in[0]: rnn_state[0],
+                                           self.local_AC.state_in[1]: rnn_state[1]}
+                            if self.config.GOAL_ON:
+                                feed_dict_v.update({self.local_AC.direction_input: goal_direction})
+                            v1 = sess.run(self.local_AC.value,
+                                          feed_dict=feed_dict_v)
+                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, self.config.GAMMA, self.config.LAMBDA, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
                     if d or (episode_step_count == self.config.MAX_EPISODE_LENGTH):
@@ -328,9 +331,6 @@ class Worker:
                 self.episode_rewards.append(episode_reward)
                 self.episode_lengths.append(episode_step_count)
                 self.episode_mean_values.append(np.mean(episode_values))
-
-                if len(episode_buffer) != 0:
-                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, self.config.GAMMA, sess)
 
                 steps_since_log = self.local_steps - self.last_log_writing_steps
 

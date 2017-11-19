@@ -26,6 +26,7 @@ class Configuration:
         self.MAX_EPISODE_LENGTH = 120
         self.STEPS_FOR_UPDATE = 5
         self.GAMMA = 0.99
+        self.LAMBDA = 0.96
         self.STATE_SHAPE = [84, 84, 3]  # RGB
         self.ACTIONS = 3
         self.NUM_WORKERS = 8
