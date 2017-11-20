@@ -318,7 +318,7 @@ class Commander:
 
         """ Depth classes """
 
-        bins = [0, 1, 2, 3, 4, 5, 6, 7]  # TODO: better depth bins
+        bins = [0.0, 1.0, 1.65, 2.71, 4.47, 7.37, 12.14, 20.]  # exponential spacing
         out = np.digitize(depth_image, bins) - np.ones(depth_image.shape, dtype=np.int8)
         return out
 
