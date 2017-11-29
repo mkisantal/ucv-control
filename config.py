@@ -41,6 +41,7 @@ class Configuration:
         self.GOAL_DIRECTION_REWARD = 1.0
         self.CRASH_REWARD = -10.0
         self.CONTROL_EFFORT_REWARD_MULTIPLIER = -1.0 / 100
+        self.TURNING_REWARD = -0.05
 
         # Auxiliary tasks
         self.AUX_TASK_D2 = True
