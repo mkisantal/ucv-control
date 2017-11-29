@@ -124,7 +124,7 @@ def main(mode, steps):
                 finished_episode_count = 0
                 for player in players:
                     finished_episode_count += player.episodes_finished
-                if finished_episode_count == config.MAX_EPISODES_FOR_EVAL:
+                if finished_episode_count >= config.MAX_EPISODES_FOR_EVAL:
                     all_episodes_finished = True
                 else:
                     print('Waiting for {} episodes to finish.'.format(config.MAX_EPISODES_FOR_EVAL -
