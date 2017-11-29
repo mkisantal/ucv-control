@@ -148,6 +148,14 @@ class Commander:
             total_reward += control_effort_reward
         else:
             # control effort reward is not implemented for simple turning actions
+            if cmd != self.previous_cmd:
+                if 'forward' in [cmd, self.previous_cmd]:
+                    total_reward += 7.5 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
+                else:
+                    total_reward += 15 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
+                total_reward += self.config.TURNING_REWARD
+            self.previous_cmd = cmd
+
             pass
 
         return total_reward
