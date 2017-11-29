@@ -39,16 +39,22 @@ class ACNetwork:
         # Graph Definition
         with tf.variable_scope(scope):
             # input image
-            self.inputs = tf.placeholder(shape=[None]+config.STATE_SHAPE, dtype=tf.float32)
+            self.inputs = tf.placeholder(shape=[None]+config.STATE_SHAPE, dtype=tf.float32, name='input_image')
 
             # one-hot depth labels for each depth pixel
-            self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
+            self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32, name='depth_px_{}'.format(i)) for i in range(4*16)]
 
             # sin(heading_error)
-            self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32)
+            self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32, name='heading_error_input')
 
             # angular velocity state
-            self.velocity_state = tf.placeholder(shape=[None, 1], dtype=tf.float32)
+            self.velocity_state = tf.placeholder(shape=[None, 1], dtype=tf.float32, name='velocity_state')
+
+            # previous action
+            self.prev_action = tf.placeholder(shape=[None, config.ACTIONS], dtype=tf.float32, name='previous_action')
+
+            # previous reward
+            self.prev_reward = tf.placeholder(shape=[None, 1], dtype=tf.float32, name='previous_reward')
 
             # convolutional encoder
             self.conv1 = slim.conv2d(inputs=self.inputs,
@@ -65,6 +71,20 @@ class ACNetwork:
                                      activation_fn=tf.nn.elu)
             hidden = slim.fully_connected(slim.flatten(self.conv2), 256, activation_fn=tf.nn.elu)
 
+            # Concatenating additional inputs with CNN outputs
+            layers_to_concat = [hidden]
+            if config.GOAL_ON:
+                layers_to_concat.append(self.direction_input)
+            if config.ACCELERATION_ACTIONS:
+                layers_to_concat.append(self.velocity_state)
+            if config.PREV_REWARD_ON:
+                layers_to_concat.append(self.prev_reward)
+            if config.PREV_ACTION_ON:
+                layers_to_concat.append(self.prev_action)
+
+            concatenated = tf.concat(layers_to_concat, axis=1)
+            rnn_in = tf.expand_dims(concatenated, [0])
+
             # LSTM layer
             lstm_cell = rnn.BasicLSTMCell(256, state_is_tuple=True)
             c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
@@ -72,10 +92,6 @@ class ACNetwork:
             self.state_init = [c_init, h_init]
             c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
             h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
-            if config.GOAL_ON:
-                rnn_in = tf.expand_dims(tf.concat((hidden, self.direction_input), axis=1), [0])  # goal direction input
-            else:
-                rnn_in = tf.expand_dims(hidden, [0])
             step_size = tf.shape(self.inputs)[:1]
             self.state_in = rnn.LSTMStateTuple(c_in, h_in)
             lstm_outputs, lstm_state = \
@@ -220,6 +236,16 @@ class Worker:
             feed_dict.update({self.local_AC.direction_input: goal_vector})
         if self.config.ACCELERATION_ACTIONS:
             feed_dict.update({self.local_AC.velocity_state: velocity_state})
+        if self.config.PREV_ACTION_ON:
+            prev_action = np.zeros(self.config.ACTIONS, dtype=np.float32)
+            for i in range(len(actions)-1):
+                prev_action = np.vstack((prev_action, np.eye(self.config.ACTIONS, dtype=np.float32)[actions[i]][:]))
+            feed_dict.update({self.local_AC.prev_action: prev_action})
+        if self.config.PREV_REWARD_ON:
+            prev_reward = 0.0
+            for i in range(len(rewards) - 1):
+                prev_reward = np.vstack((prev_reward, rewards[i]))
+            feed_dict.update({self.local_AC.prev_reward: prev_reward})
 
         # calculate losses and gradients
         results = sess.run(ops_for_run, feed_dict=feed_dict)
@@ -247,6 +273,8 @@ class Worker:
                 episode_reward = 0
                 episode_step_count = 0
                 d = False
+                previous_reward = np.expand_dims(np.expand_dims(0.0, 0), 0)  # np.zeros([1, 1], dtype=float)
+                previous_action = np.zeros([1, self.config.ACTIONS], dtype=np.float32)
 
                 self.env.new_episode()
                 s = self.env.get_observation()
@@ -271,19 +299,28 @@ class Worker:
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
                     if self.config.ACCELERATION_ACTIONS:
                         feed_dict.update({self.local_AC.velocity_state: velocity_state})
+                    if self.config.PREV_ACTION_ON:
+                        feed_dict.update({self.local_AC.prev_action: previous_action})
+                    if self.config.PREV_REWARD_ON:
+                        feed_dict.update({self.local_AC.prev_reward: previous_reward})
+
                     a_dist, v, rnn_state = sess.run([self.local_AC.policy,
                                                      self.local_AC.value,
                                                      self.local_AC.state_out],
                                                     feed_dict=feed_dict)
                     a = np.random.choice(a_dist[0], p=a_dist[0])
-                    a = np.argmax(a_dist == a)
+                    a = np.argmax(np.equal(a_dist, a))
+                    previous_action = np.expand_dims(np.eye(self.config.ACTIONS)[a][:], 0)  # onehot previous action
 
                     self.cumulative_steps.increment()
                     sess.run(self.increment_steps)
                     self.local_steps += 1
 
+                    # Act and receive reward from th environment
                     r = self.env.action(self.actions[a])
                     d = self.env.is_episode_finished()
+                    previous_reward = np.expand_dims(np.expand_dims(r, 0), 0)
+
                     if d is False:
                         s1 = self.env.get_observation()
                         episode_frames.append(s1)
@@ -319,6 +356,12 @@ class Worker:
                                            self.local_AC.state_in[1]: rnn_state[1]}
                             if self.config.GOAL_ON:
                                 feed_dict_v.update({self.local_AC.direction_input: goal_direction})
+                            if self.config.ACCELERATION_ACTIONS:
+                                feed_dict_v.update({self.local_AC.velocity_state: velocity_state})
+                            if self.config.PREV_ACTION_ON:
+                                feed_dict_v.update({self.local_AC.prev_action: previous_action})
+                            if self.config.PREV_REWARD_ON:
+                                feed_dict_v.update({self.local_AC.prev_reward: previous_reward})
                             v1 = sess.run(self.local_AC.value,
                                           feed_dict=feed_dict_v)
                         v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, self.config.GAMMA, self.config.LAMBDA, sess)

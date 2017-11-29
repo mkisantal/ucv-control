@@ -20,7 +20,7 @@ class Configuration:
         self.MODEL_PATH = './model'
         self.MODEL_SAVE_PERIOD = 5e4
         self.LOGGING_PERIOD = 500
-        self.VERBOSITY = 1
+        self.VERBOSITY = 2
 
         # Basic RL settings
         self.MAX_EPISODE_LENGTH = 120
@@ -30,8 +30,12 @@ class Configuration:
         self.STATE_SHAPE = [84, 84, 3]  # RGB
         self.ACTIONS = 3
         self.NUM_WORKERS = 8
-        self.GOAL_ON = True
         self.ACCELERATION_ACTIONS = True
+
+        # Additional inputs
+        self.GOAL_ON = True
+        self.PREV_REWARD_ON = True
+        self.PREV_ACTION_ON = True
 
         # RL rewards
         self.GOAL_DIRECTION_REWARD = 1.0
