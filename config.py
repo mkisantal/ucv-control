@@ -49,6 +49,7 @@ class Configuration:
             self.AUX_TASK_D2 = False    # no aux task(s) for evaluation
 
         # Evaluation settings
+        self.STOCHASTIC_POLICY_EVAL = True
         self.MAX_EVALUATION_EPISODE_LENGTH = 750
         self.MAX_EPISODES_FOR_EVAL = 20
         self.EVAL_GOAL_X = 4000

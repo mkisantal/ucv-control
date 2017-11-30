@@ -476,12 +476,17 @@ class Player:
                         feed_dict.update({self.local_AC.velocity_state: velocity_state})
 
                     if self.config.AUX_TASK_D2:
-                        self.env.get_observation(viewmode='depth')
+                        # no training, no need for depth images
+                        # self.env.get_observation(viewmode='depth')
                         pass
 
                     # running inference on network, action selection
                     a_dist, self.rnn_state = session.run([self.local_AC.policy, self.local_AC.state_out], feed_dict=feed_dict)
-                    a = np.argmax(a_dist)
+                    if self.config.STOCHASTIC_POLICY_EVAL:
+                        a = np.random.choice(a_dist[0], p=a_dist[0])
+                        a = np.argmax(np.equal(a_dist, a))
+                    else:
+                        a = np.argmax(a_dist)
 
                     reward = self.env.action(self.actions[a])
                     self.steps += 1
