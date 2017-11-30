@@ -237,12 +237,12 @@ class Worker:
         if self.config.ACCELERATION_ACTIONS:
             feed_dict.update({self.local_AC.velocity_state: velocity_state})
         if self.config.PREV_ACTION_ON:
-            prev_action = np.zeros(self.config.ACTIONS, dtype=np.float32)
+            prev_action = np.zeros((1, self.config.ACTIONS), dtype=np.float32)
             for i in range(len(actions)-1):
                 prev_action = np.vstack((prev_action, np.eye(self.config.ACTIONS, dtype=np.float32)[actions[i]][:]))
             feed_dict.update({self.local_AC.prev_action: prev_action})
         if self.config.PREV_REWARD_ON:
-            prev_reward = 0.0
+            prev_reward = np.zeros((1, 1), dtype=float)
             for i in range(len(rewards) - 1):
                 prev_reward = np.vstack((prev_reward, rewards[i]))
             feed_dict.update({self.local_AC.prev_reward: prev_reward})
@@ -455,6 +455,10 @@ class Player:
                 self.rnn_state = self.local_AC.state_init
                 self.steps = 0
                 self.episodes_started += 1
+                previous_reward = np.expand_dims(np.expand_dims(0.0, 0), 0)  # np.zeros([1, 1], dtype=float)
+                previous_action = np.zeros([1, self.config.ACTIONS], dtype=np.float32)
+                if self.config.ACCELERATION_ACTIONS:
+                    velocity_state = self.env.get_velocity_state()
 
                 # episode loop
                 while not finished_episode:
@@ -464,6 +468,12 @@ class Player:
                     if self.config.GOAL_ON:
                         goal_direction = self.env.get_goal_direction()
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
+                    if self.config.PREV_ACTION_ON:
+                        feed_dict.update({self.local_AC.prev_action: previous_action})
+                    if self.config.PREV_REWARD_ON:
+                        feed_dict.update({self.local_AC.prev_reward: previous_reward})
+                    if self.config.ACCELERATION_ACTIONS:
+                        feed_dict.update({self.local_AC.velocity_state: velocity_state})
 
                     if self.config.AUX_TASK_D2:
                         self.env.get_observation(viewmode='depth')
@@ -475,6 +485,8 @@ class Player:
 
                     reward = self.env.action(self.actions[a])
                     self.steps += 1
+                    previous_action = np.expand_dims(np.eye(self.config.ACTIONS)[a][:], 0)  # onehot previous action
+                    previous_reward = np.expand_dims(np.expand_dims(reward, 0), 0)
 
                     if self.steps > self.config.MAX_EVALUATION_EPISODE_LENGTH:
                         self.env.new_episode(save_trajectory=True)
