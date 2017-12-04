@@ -47,6 +47,7 @@ class Commander:
         self.angular_speed_state = 0
         self.angular_acc = 5  # deg/step
         self.max_angular_speed = 15  # deg/step
+        self.previous_cmd = 'forward'
 
         self.episode_finished = False
         self.should_terminate = False
@@ -147,7 +148,6 @@ class Commander:
             control_effort_reward = abs(self.angular_speed_state) * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
             total_reward += control_effort_reward
         else:
-            # control effort reward is not implemented for simple turning actions
             if cmd != self.previous_cmd:
                 if 'forward' in [cmd, self.previous_cmd]:
                     total_reward += 7.5 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
@@ -155,8 +155,6 @@ class Commander:
                     total_reward += 15 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
                 total_reward += self.config.TURNING_REWARD
             self.previous_cmd = cmd
-
-            pass
 
         return total_reward
 
@@ -281,8 +279,10 @@ class Commander:
             return self.config.GOAL_DIRECTION_REWARD  # TODO: terminate episode!
         norm_displacement = np.array(displacement) / self.speed
         norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
-                           / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
-        return np.dot(norm_goal_vector, norm_displacement) * self.config.GOAL_DIRECTION_REWARD
+                           / (np.linalg.norm(np.subtract(self.goal_location, prev_loc)) + 0.00001)  # avoid nan
+        disp_reward = np.dot(norm_goal_vector, norm_displacement) * self.config.GOAL_DIRECTION_REWARD
+        assert(not np.isnan(disp_reward))
+        return disp_reward
 
     @staticmethod
     def _read_npy(res):
