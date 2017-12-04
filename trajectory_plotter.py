@@ -138,6 +138,7 @@ def main(global_steps):
         trajectories.extend(data)
 
     fig = plt.figure()
+    fig.suptitle(global_steps[:-1] + ' episodes')
     ax = fig.add_subplot(111, aspect='equal')
     plt.ion()
     # draw_labyrinth(ax)
