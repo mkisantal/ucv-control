@@ -4,7 +4,7 @@ import threading
 from time import sleep
 from logger import TestLogger, CumulativeStepsLogger
 from config import Configuration
-from tensorflow.contrib import slim
+import tf_utils
 import network as net
 import re
 
@@ -24,7 +24,7 @@ def main(mode, steps):
         global_steps = tf.Variable(0, dtype=tf.int32, name='global_steps', trainable=False)
         trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
         master_network = net.ACNetwork('global', None, config)
-        var_to_restore = slim.get_variables_to_restore()  # restore only master network
+        var_to_restore = tf_utils.get_variables_to_restore()
         saver = tf.train.Saver(var_to_restore, max_to_keep=1000)
 
         if config.TRAIN_MODE:
@@ -44,7 +44,7 @@ def main(mode, steps):
         coord = tf.train.Coordinator()
 
         # weight initialization
-        sess.run(tf.global_variables_initializer())
+        sess.run(tf.initialize_all_variables())
         if (config.LOAD_MODEL or not config.TRAIN_MODE) and os.path.exists(model_path + '/checkpoint'):
             print('Loading model...')
             ckpt = tf.train.get_checkpoint_state(model_path)

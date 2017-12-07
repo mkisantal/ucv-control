@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
-import tensorflow.contrib.rnn as rnn
+from tensorflow.python.ops.rnn_cell import BasicLSTMCell
 import scipy.signal
 import ucv_utils
 from command import Commander
@@ -57,19 +56,23 @@ class ACNetwork:
             self.prev_reward = tf.placeholder(shape=[None, 1], dtype=tf.float32, name='previous_reward')
 
             # convolutional encoder
-            self.conv1 = slim.conv2d(inputs=self.inputs,
-                                     num_outputs=16,
-                                     kernel_size=[8, 8],
-                                     stride=[4, 4],
-                                     padding='VALID',
-                                     activation_fn=tf.nn.elu)
-            self.conv2 = slim.conv2d(inputs=self.conv1,
-                                     num_outputs=32,
-                                     kernel_size=[4, 4],
-                                     stride=[2, 2],
-                                     padding='VALID',
-                                     activation_fn=tf.nn.elu)
-            hidden = slim.fully_connected(slim.flatten(self.conv2), 256, activation_fn=tf.nn.elu)
+            self.conv1 = tf.contrib.layers.convolution2d(x=self.inputs,
+                                                         num_output_channels=16,
+                                                         kernel_size=[8, 8],
+                                                         stride=[4, 4],
+                                                         padding='VALID',
+                                                         activation_fn=tf.nn.elu)
+            self.conv2 = tf.contrib.layers.convolution2d(x=self.conv1,
+                                                         num_output_channels=32,
+                                                         kernel_size=[4, 4],
+                                                         stride=[2, 2],
+                                                         padding='VALID',
+                                                         activation_fn=tf.nn.elu)
+
+            shape = self.conv1.get_shape().as_list()
+            flattened_dim = np.prod(shape[1:])
+            flatten = tf.reshape(self.conv1, [-1, flattened_dim])
+            hidden = tf.contrib.layers.fully_connected(x=flatten, num_output_units=256, activation_fn=tf.nn.elu)
 
             # Concatenating additional inputs with CNN outputs
             layers_to_concat = [hidden]
@@ -82,58 +85,62 @@ class ACNetwork:
             if config.PREV_ACTION_ON:
                 layers_to_concat.append(self.prev_action)
 
-            concatenated = tf.concat(layers_to_concat, axis=1)
+            concatenated = tf.concat(concat_dim=1, values=layers_to_concat)
             rnn_in = tf.expand_dims(concatenated, [0])
 
             # LSTM layer
-            lstm_cell = rnn.BasicLSTMCell(256, state_is_tuple=True)
-            c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-            h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
-            self.state_init = [c_init, h_init]
-            c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-            h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+            lstm_cell = BasicLSTMCell(256)
+            # c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
+            # h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
+            self.state_init = np.zeros((1, lstm_cell.state_size), np.float32)
+            # c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
+            # h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+            self.state_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size])
             step_size = tf.shape(self.inputs)[:1]
-            self.state_in = rnn.LSTMStateTuple(c_in, h_in)
             lstm_outputs, lstm_state = \
                 tf.nn.dynamic_rnn(lstm_cell,
                                   rnn_in,
                                   sequence_length=step_size,
                                   initial_state=self.state_in,
                                   time_major=False)
-            lstm_c, lstm_h = lstm_state
-            self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
+            # lstm_c, lstm_h = lstm_state
+            # self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
+            self.state_out = lstm_state[:1, :]
             rnn_out = tf.reshape(lstm_outputs, [-1, 256])
 
             # output layers
-            self.policy = slim.fully_connected(rnn_out, config.ACTIONS,
-                                               activation_fn=tf.nn.softmax,
-                                               weights_initializer=normalized_columns_initializer(0.01),
-                                               biases_initializer=None)
-            self.value = slim.fully_connected(rnn_out, 1,
-                                              activation_fn=None,
-                                              weights_initializer=normalized_columns_initializer(1.0),
-                                              biases_initializer=None
-                                              )
+            self.policy = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=config.ACTIONS,
+                                                            activation_fn=tf.nn.softmax,
+                                                            weight_init=normalized_columns_initializer(0.01),
+                                                            bias_init=None)
+            self.value = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=1,
+                                                           activation_fn=None,
+                                                           weight_init=normalized_columns_initializer(0.01),
+                                                           bias_init=None)
 
             # auxiliary outputs
             if config.AUX_TASK_D2:
-                self.aux_depth2_hidden = slim.fully_connected(rnn_out, 128, activation_fn=tf.nn.elu)
+                self.aux_depth2_hidden = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=128,
+                                                                           activation_fn=tf.nn.elu)
                 self.aux_depth2_logits = [
-                    slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
-                    for i in range(4*16)]
+                    tf.contrib.layers.fully_connected(
+                        x=self.aux_depth2_hidden, num_output_units=8, activation_fn=None) for i in range(4*16)]
 
             # loss functions
             if scope != 'global':
-                self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
-                self.actions_onehot = tf.one_hot(self.actions, config.ACTIONS, dtype=tf.float32)
+                self.actions = tf.placeholder(shape=[None], dtype=tf.int64)
+                self.actions_onehot = tf.one_hot(self.actions, config.ACTIONS, 1, 0)
                 self.target_v = tf.placeholder(shape=[None], dtype=tf.float32)
                 self.advantages = tf.placeholder(shape=[None], dtype=tf.float32)
 
-                self.responsible_outputs = tf.reduce_sum(self.policy * self.actions_onehot, [1])
+                self.responsible_outputs = tf.reduce_sum(self.policy * tf.cast(self.actions_onehot, dtype=tf.float32),
+                                                         reduction_indices=[1])
 
                 self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
-                self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy))
-                self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs) * self.advantages)
+                log_policy = tf.log(tf.clip_by_value(self.policy, 1e-20, 1))
+                self.entropy = -tf.reduce_sum(self.policy * log_policy)
+                self.policy_loss = -tf.reduce_sum(tf.log(tf.clip_by_value(self.responsible_outputs, 1e-20, 1))
+                                                  * self.advantages)
                 loss_array = [0.5 * self.value_loss, -0.01 * self.entropy, self.policy_loss]
 
                 # Auxiliary Loss Functions
@@ -174,7 +181,7 @@ class Worker:
         self.episode_rewards = []
         self.episode_lengths = []
         self.episode_mean_values = []
-        self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
+        self.summary_writer = tf.train.SummaryWriter('train' + str(self.number), graph=tf.get_default_graph())
         self.env = Commander(self.number, self.config, self.name)   # RL training (the 'game')
         self.local_AC = ACNetwork(self.name, trainer, self.config)
         self.update_local_ops = update_target_graph('global', self.name)
@@ -215,8 +222,7 @@ class Worker:
                      self.local_AC.inputs: np.vstack(np.expand_dims(obs, 0) for obs in observations),
                      self.local_AC.actions: actions,
                      self.local_AC.advantages: advantages,
-                     self.local_AC.state_in[0]: rnn_state[0],
-                     self.local_AC.state_in[1]: rnn_state[1]
+                     self.local_AC.state_in: rnn_state
                      }
 
         ops_for_run = [self.local_AC.value_loss,
@@ -293,8 +299,7 @@ class Worker:
 
                     # running network for action selection
                     feed_dict = {self.local_AC.inputs: [s],
-                                 self.local_AC.state_in[0]: rnn_state[0],
-                                 self.local_AC.state_in[1]: rnn_state[1]}
+                                 self.local_AC.state_in: rnn_state}
                     if self.config.GOAL_ON:
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
                     if self.config.ACCELERATION_ACTIONS:
@@ -352,8 +357,7 @@ class Worker:
                         else:
                             # bootstrap value from the last step for return calculation
                             feed_dict_v = {self.local_AC.inputs: [s],
-                                           self.local_AC.state_in[0]: rnn_state[0],
-                                           self.local_AC.state_in[1]: rnn_state[1]}
+                                           self.local_AC.state_in: rnn_state}
                             if self.config.GOAL_ON:
                                 feed_dict_v.update({self.local_AC.direction_input: goal_direction})
                             if self.config.ACCELERATION_ACTIONS:
@@ -463,8 +467,7 @@ class Player:
                 # episode loop
                 while not finished_episode:
                     feed_dict = {self.local_AC.inputs: [self.env.get_observation()],
-                                 self.local_AC.state_in[0]: self.local_AC.state_init[0],
-                                 self.local_AC.state_in[1]: self.local_AC.state_init[1]}
+                                 self.local_AC.state_in: self.local_AC.state_init}
                     if self.config.GOAL_ON:
                         goal_direction = self.env.get_goal_direction()
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
