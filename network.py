@@ -112,11 +112,11 @@ class ACNetwork:
             self.policy = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=config.ACTIONS,
                                                             activation_fn=tf.nn.softmax,
                                                             weight_init=normalized_columns_initializer(0.01),
-                                                            bias_init=None)
+                                                            bias_init=None, name='policy_out')
             self.value = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=1,
                                                            activation_fn=None,
                                                            weight_init=normalized_columns_initializer(0.01),
-                                                           bias_init=None)
+                                                           bias_init=None, name='value_out')
 
             # auxiliary outputs
             if config.AUX_TASK_D2:
