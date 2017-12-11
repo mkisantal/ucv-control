@@ -41,7 +41,7 @@ class Configuration:
         # RL rewards
         self.GOAL_DIRECTION_REWARD = 1.0
         self.CRASH_REWARD = -10.0
-        self.CONTROL_EFFORT_REWARD_MULTIPLIER = -1.0 / 100
+        self.CONTROL_EFFORT_REWARD_MULTIPLIER = -0.75 / 100
         self.TURNING_REWARD = -0.05
 
         # Auxiliary tasks
@@ -52,8 +52,8 @@ class Configuration:
         # Evaluation settings
         self.NUM_EVAL_WORKERS = 4
         self.STOCHASTIC_POLICY_EVAL = True
-        self.MAX_EVALUATION_EPISODE_LENGTH = 750
-        self.MAX_EPISODES_FOR_EVAL = 20
+        self.MAX_EVALUATION_EPISODE_LENGTH = 400
+        self.MAX_EPISODES_FOR_EVAL = 12
         self.EVAL_GOAL_X = 4000
         self.EVAL_GOAL_Y = -4000
         self.EVAL_START_X = -4000
