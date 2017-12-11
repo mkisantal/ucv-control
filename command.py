@@ -153,6 +153,7 @@ class Commander:
                     total_reward += 7.5 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
                 else:
                     total_reward += 15 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
+            if cmd != 'forward':
                 total_reward += self.config.TURNING_REWARD
             self.previous_cmd = cmd
 
