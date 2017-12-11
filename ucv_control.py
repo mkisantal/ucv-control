@@ -37,7 +37,7 @@ def main(mode, steps):
         else:
             # initializing players for evaluation
             players = []
-            for i in range(config.NUM_WORKERS):
+            for i in range(config.NUM_EVAL_WORKERS):
                 players.append(net.Player(i, config))
 
     with tf.Session() as sess:
