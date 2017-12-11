@@ -13,6 +13,8 @@ def calculate_reward(traj, idx, goal):
     loc = np.array(traj[idx]['location'][:2])
     prev_loc = np.array(traj[idx-1]['location'][:2])
     disp = np.subtract(loc, prev_loc)
+    if np.linalg.norm(disp) == 0.0:
+        return 0
     goal_distance = np.linalg.norm(np.subtract(loc, goal))
     if goal_distance < 200.0:  # closer than 2 meter to the goal
         return 1  # TODO: terminate episode!
@@ -95,7 +97,12 @@ def draw_forest(axis):
 
 
 def interpolate_color(value):
-        return 0.5 - 0.5*value, 0, 0.5 + 0.5*value
+    if value < 0:
+        value = 0
+    if value > 1:
+        value = 1
+    r, g, b = 0.5 - 0.5*value, 0, 0.5 + 0.5*value
+    return r, g, b
 
 
 def draw_trajectory(traj, axis, config, show_start=False, show_crash=False, goal=None):
@@ -138,7 +145,7 @@ def main(global_steps):
         trajectories.extend(data)
 
     fig = plt.figure()
-    fig.suptitle(global_steps[:-1] + ' episodes')
+    fig.suptitle(global_steps + ' global steps')
     ax = fig.add_subplot(111, aspect='equal')
     plt.ion()
     # draw_labyrinth(ax)
@@ -159,6 +166,7 @@ def main(global_steps):
     fig.savefig(fig_name, format='pdf')
     if config.VERBOSITY > 0:
         print('Evaluation: {} trajectories plotted at {} global steps, saved to {}'.format(counter, global_steps, fig_name))
+
 
 if __name__ == '__main__':
     import argparse
