@@ -43,10 +43,10 @@ class Commander:
         else:
             self.action_space = ('left', 'right', 'forward')
         self.state_space_size = self.config.STATE_SHAPE  # for now RGB
-        self.speed = 40.0  # cm/step    # TODO: move these to config
+        self.speed = self.config.DRONE_SPEED
         self.angular_speed_state = 0
-        self.angular_acc = 5  # deg/step
-        self.max_angular_speed = 15  # deg/step
+        self.angular_acc = self.config.DRONE_ANGULAR_ACC
+        self.max_angular_speed = self.config.DRONE_MAX_ANGULAR_SPEED
         self.previous_cmd = 'forward'
 
         self.episode_finished = False
@@ -153,6 +153,7 @@ class Commander:
                     total_reward += 7.5 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
                 else:
                     total_reward += 15 * self.config.CONTROL_EFFORT_REWARD_MULTIPLIER
+            if cmd != 'forward':
                 total_reward += self.config.TURNING_REWARD
             self.previous_cmd = cmd
 
