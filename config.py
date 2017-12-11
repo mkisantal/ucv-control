@@ -22,6 +22,11 @@ class Configuration:
         self.LOGGING_PERIOD = 500
         self.VERBOSITY = 2
 
+        # DRONE COMMANDS
+        self.DRONE_SPEED = 60  # cm/step
+        self.DRONE_ANGULAR_ACC = 5  # deg/step^2
+        self.DRONE_MAX_ANGULAR_SPEED = 15  # deg/step
+
         # Basic RL settings
         self.MAX_EPISODE_LENGTH = 120
         self.STEPS_FOR_UPDATE = 5
