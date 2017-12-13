@@ -132,8 +132,9 @@ class ACNetwork:
                 self.responsible_outputs = tf.reduce_sum(self.policy * self.actions_onehot, [1])
 
                 self.value_loss = 0.5 * tf.reduce_sum(tf.square(self.target_v - tf.reshape(self.value, [-1])))
-                self.entropy = -tf.reduce_sum(self.policy * tf.log(self.policy))
-                self.policy_loss = -tf.reduce_sum(tf.log(self.responsible_outputs) * self.advantages)
+                self.entropy = -tf.reduce_sum(self.policy * tf.log(tf.clip_by_value(self.policy, 1e-20, 1)))
+                self.policy_loss = -tf.reduce_sum(tf.log(tf.clip_by_value(self.responsible_outputs, 1e-20, 1))
+                                                  * self.advantages)
                 loss_array = [0.5 * self.value_loss, -0.01 * self.entropy, self.policy_loss]
 
                 # Auxiliary Loss Functions
