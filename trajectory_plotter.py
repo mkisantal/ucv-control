@@ -136,7 +136,7 @@ def main(global_steps):
 
     # loading trajectory files
     trajectories = []
-    for i in range(config.NUM_WORKERS):
+    for i in range(config.NUM_EVAL_WORKERS):
         filename = './TRAJECTORIES/' + global_steps + '/trajectory_player_{}.yaml'.format(i)
         if config.VERBOSITY > 1:
             print('loading trajectory_player_{}.yaml'.format(i))
