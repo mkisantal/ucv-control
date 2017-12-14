@@ -108,12 +108,11 @@ class ACNetwork:
             self.policy = slim.fully_connected(rnn_out, config.ACTIONS,
                                                activation_fn=tf.nn.softmax,
                                                weights_initializer=normalized_columns_initializer(0.01),
-                                               biases_initializer=None)
+                                               biases_initializer=None, scope='policy_out')
             self.value = slim.fully_connected(rnn_out, 1,
                                               activation_fn=None,
                                               weights_initializer=normalized_columns_initializer(1.0),
-                                              biases_initializer=None
-                                              )
+                                              biases_initializer=None, scope='value_out')
 
             # auxiliary outputs
             if config.AUX_TASK_D2:
