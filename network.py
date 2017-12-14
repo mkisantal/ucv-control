@@ -171,7 +171,10 @@ class Worker:
         self.number = name
         self.config = config
         self.model_path = self.config.MODEL_PATH
-        self.trainer = trainer
+        if trainer is None:
+            self.trainer = tf.train.AdamOptimizer(learning_rate=self.config.LEARNING_RATE)
+        else:
+            self.trainer = trainer
         self.global_episodes = global_episodes
         self.increment_episodes = global_episodes.assign_add(1)
         self.global_steps = global_steps
@@ -183,7 +186,7 @@ class Worker:
         self.episode_mean_values = []
         self.summary_writer = tf.train.SummaryWriter('train' + str(self.number), graph=tf.get_default_graph())
         self.env = Commander(self.number, self.config, self.name)   # RL training (the 'game')
-        self.local_AC = ACNetwork(self.name, trainer, self.config)
+        self.local_AC = ACNetwork(self.name, self.trainer, self.config)
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
         self.batch_rnn_state_init = None

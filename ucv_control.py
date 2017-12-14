@@ -22,7 +22,8 @@ def main(mode, steps):
         # initializing a master network
         global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
         global_steps = tf.Variable(0, dtype=tf.int32, name='global_steps', trainable=False)
-        trainer = tf.train.AdamOptimizer(learning_rate=config.LEARNING_RATE)
+        # trainer = tf.train.AdamOptimizer(learning_rate=config.LEARNING_RATE)
+        trainer = None
         master_network = net.ACNetwork('global', None, config)
         var_to_restore = tf_utils.get_variables_to_restore()
         saver = tf.train.Saver(var_to_restore, max_to_keep=1000)
