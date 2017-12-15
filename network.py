@@ -69,9 +69,9 @@ class ACNetwork:
                                                          padding='VALID',
                                                          activation_fn=tf.nn.elu)
 
-            shape = self.conv1.get_shape().as_list()
+            shape = self.conv2.get_shape().as_list()
             flattened_dim = np.prod(shape[1:])
-            flatten = tf.reshape(self.conv1, [-1, flattened_dim])
+            flatten = tf.reshape(self.conv2, [-1, flattened_dim])
             hidden = tf.contrib.layers.fully_connected(x=flatten, num_output_units=256, activation_fn=tf.nn.elu)
 
             # Concatenating additional inputs with CNN outputs
@@ -120,11 +120,12 @@ class ACNetwork:
 
             # auxiliary outputs
             if config.AUX_TASK_D2:
-                self.aux_depth2_hidden = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=128,
-                                                                           activation_fn=tf.nn.elu)
-                self.aux_depth2_logits = [
-                    tf.contrib.layers.fully_connected(
-                        x=self.aux_depth2_hidden, num_output_units=8, activation_fn=None) for i in range(4*16)]
+                with tf.variable_scope('aux_depth'):
+                    self.aux_depth2_hidden = tf.contrib.layers.fully_connected(x=rnn_out, num_output_units=128,
+                                                                               activation_fn=tf.nn.elu)
+                    self.aux_depth2_logits = [
+                        tf.contrib.layers.fully_connected(
+                            x=self.aux_depth2_hidden, num_output_units=8, activation_fn=None) for i in range(4*16)]
 
             # loss functions
             if scope != 'global':
