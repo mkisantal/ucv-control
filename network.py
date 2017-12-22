@@ -5,6 +5,7 @@ import tensorflow.contrib.rnn as rnn
 import scipy.signal
 import ucv_utils
 from command import Commander
+from schedule import Schedule
 
 
 def normalized_columns_initializer(std=1.0):
@@ -34,7 +35,9 @@ class ACNetwork:
 
     """ Actor-Critic Network Class """
 
-    def __init__(self, scope, trainer, config):
+    def __init__(self, scope, trainer, config, start_step):
+
+        schedule = Schedule(config)
 
         # Graph Definition
         with tf.variable_scope(scope):
@@ -55,6 +58,10 @@ class ACNetwork:
 
             # previous reward
             self.prev_reward = tf.placeholder(shape=[None, 1], dtype=tf.float32, name='previous_reward')
+
+            # entropy reward scheduling parameter
+            self.entropy_parameter = schedule.entropy(start_step)
+            print('Entropy parameter set to {}'.format(schedule.entropy(start_step)))
 
             # convolutional encoder
             self.conv1 = slim.conv2d(inputs=self.inputs,
@@ -134,7 +141,7 @@ class ACNetwork:
                 self.entropy = -tf.reduce_sum(self.policy * tf.log(tf.clip_by_value(self.policy, 1e-20, 1)))
                 self.policy_loss = -tf.reduce_sum(tf.log(tf.clip_by_value(self.responsible_outputs, 1e-20, 1))
                                                   * self.advantages)
-                loss_array = [0.5 * self.value_loss, -0.01 * self.entropy, self.policy_loss]
+                loss_array = [0.5 * self.value_loss, self.entropy_parameter * self.entropy, self.policy_loss]  # -0.01
 
                 # Auxiliary Loss Functions
                 if config.AUX_TASK_D2:
@@ -159,7 +166,7 @@ class Worker:
 
     """ A3C agent, optionally augmented with aux tasks """
 
-    def __init__(self, name, trainer, global_episodes, global_steps, logger_steps, config):
+    def __init__(self, name, trainer, global_episodes, global_steps, logger_steps, config, start_step):
         self.name = 'worker_' + str(name)
         self.number = name
         self.config = config
@@ -176,7 +183,7 @@ class Worker:
         self.episode_mean_values = []
         self.summary_writer = tf.summary.FileWriter('train' + str(self.number), graph=tf.get_default_graph())
         self.env = Commander(self.number, self.config, self.name)   # RL training (the 'game')
-        self.local_AC = ACNetwork(self.name, trainer, self.config)
+        self.local_AC = ACNetwork(self.name, trainer, self.config, start_step)
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
         self.batch_rnn_state_init = None
@@ -426,7 +433,7 @@ class Player:
         print('Initializing {} ...'.format(self.name))
         self.config = config
         self.number = number
-        self.local_AC = ACNetwork('player_{}'.format(self.number), None, self.config)
+        self.local_AC = ACNetwork('player_{}'.format(self.number), None, self.config, 0)
         self.update_local_ops = update_target_graph('global', 'player_{}'.format(self.number))
         self.env = Commander(self.number, self.config, self.name)
         self.actions = self.env.action_space
