@@ -18,7 +18,7 @@ class Configuration:
         # Training Settings
         self.LOAD_MODEL = True  # if there is a saved model already
         self.MODEL_PATH = './model'
-        self.MODEL_SAVE_PERIOD = 5e4
+        self.MODEL_SAVE_PERIOD = 1e4
         self.LOGGING_PERIOD = 500
         self.VERBOSITY = 2
 
@@ -41,11 +41,11 @@ class Configuration:
 
         # Additional inputs
         self.GOAL_ON = True
-        self.PREV_REWARD_ON = True
+        self.PREV_REWARD_ON = False
         self.PREV_ACTION_ON = True
 
         # RL rewards
-        self.GOAL_DIRECTION_REWARD = 1.0
+        self.GOAL_DIRECTION_REWARD = 2.0
         self.CRASH_REWARD = -10.0
         self.CONTROL_EFFORT_REWARD_MULTIPLIER = -0.75 / 100
         self.TURNING_REWARD = -0.05
