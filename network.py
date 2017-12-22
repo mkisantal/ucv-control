@@ -250,10 +250,11 @@ class Worker:
         # calculate losses and gradients
         results = sess.run(ops_for_run, feed_dict=feed_dict)
         v_l, p_l, e_l = results[:3]
+        depth_losses = results[3]
         g_n, v_n = results[-3:-1]
         self.batch_rnn_state_init = results[-1]
 
-        return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
+        return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n, depth_losses/len(rollout)
 
     def work(self, sess, coord, saver):
 
@@ -364,7 +365,7 @@ class Worker:
                                 feed_dict_v.update({self.local_AC.prev_reward: previous_reward})
                             v1 = sess.run(self.local_AC.value,
                                           feed_dict=feed_dict_v)
-                        v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, self.config.GAMMA, self.config.LAMBDA, sess)
+                        v_l, p_l, e_l, g_n, v_n, depth_l = self.train(episode_buffer, v1, self.config.GAMMA, self.config.LAMBDA, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
                     if d or (episode_step_count == self.config.MAX_EPISODE_LENGTH):
@@ -390,6 +391,7 @@ class Worker:
                     summary.value.add(tag='Losses/Entropy', simple_value=float(e_l))
                     summary.value.add(tag='Losses/Grad Norm', simple_value=float(g_n))
                     summary.value.add(tag='Var Norm', simple_value=float(v_n))
+                    summary.value.add(tag='Losses/Depth Loss', simple_value=float(depth_l))
                     self.summary_writer.add_summary(summary, episode_count)
                     self.summary_writer.flush()
 
