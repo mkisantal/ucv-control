@@ -276,8 +276,10 @@ class Commander:
         prev_loc = np.array(self.trajectory[-2]['location'])
         disp = np.array(displacement)
         goal_distance = np.linalg.norm(np.subtract(loc, self.goal_location))
-        if goal_distance < 200.0:  # closer than 2 meter to the goal
-            return self.config.GOAL_DIRECTION_REWARD  # TODO: terminate episode!
+        if goal_distance < self.config.GOAL_RADIUS:
+            if self.config.TERMINATE_EPISODE_AT_GOAL:
+                self.episode_finished = True
+            return self.config.GOAL_ARRIVAL_REWARD
         norm_displacement = np.array(displacement) / self.speed
         norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
                            / (np.linalg.norm(np.subtract(self.goal_location, prev_loc)) + 0.00001)  # avoid nan

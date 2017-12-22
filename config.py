@@ -38,6 +38,8 @@ class Configuration:
         self.ACTIONS = 3
         self.NUM_WORKERS = 8
         self.ACCELERATION_ACTIONS = True
+        self.GOAL_RADIUS = 200  # cm
+        self.TERMINATE_EPISODE_AT_GOAL = True
 
         # Additional inputs
         self.GOAL_ON = True
@@ -46,6 +48,7 @@ class Configuration:
 
         # RL rewards
         self.GOAL_DIRECTION_REWARD = 2.0
+        self.GOAL_ARRIVAL_REWARD = 2.0
         self.CRASH_REWARD = -10.0
         self.CONTROL_EFFORT_REWARD_MULTIPLIER = -0.75 / 100
         self.TURNING_REWARD = -0.05
