@@ -36,14 +36,20 @@ def remove_file(fname):
             raise
 
 
-def print_checkpoint_steps():
+def get_global_steps():
     config = Configuration('eval', 0)
     ckpt = tf.train.get_checkpoint_state(config.MODEL_PATH)
     if ckpt is None:
-        print(0)
+        steps = 0
     else:
         model_name = re.search('model-.*.cptk', ckpt.model_checkpoint_path).group(0)[6:-6]
-        print(int(model_name) * 1000)
+        steps = int(model_name) * 1000
+    return steps
+
+
+def print_checkpoint_steps():
+        print(get_global_steps())
+
 
 if __name__ == '__main__':
     print_checkpoint_steps()

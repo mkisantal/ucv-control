@@ -18,7 +18,7 @@ class Configuration:
         # Training Settings
         self.LOAD_MODEL = True  # if there is a saved model already
         self.MODEL_PATH = './model'
-        self.MODEL_SAVE_PERIOD = 5e4
+        self.MODEL_SAVE_PERIOD = 1e4
         self.LOGGING_PERIOD = 500
         self.VERBOSITY = 2
 
@@ -30,7 +30,8 @@ class Configuration:
         # Basic RL settings
         self.MAX_EPISODE_LENGTH = 120
         self.STEPS_FOR_UPDATE = 5
-        self.LEARNING_RATE = 1e-4
+        self.LEARNING_RATE = ScheduledParameter(1e-4, 1e-6, 5e5, 1e6)
+        self.ENTROPY = ScheduledParameter(-0.2, -0.01, 5e5, 1e6)
         self.GAMMA = 0.99
         self.LAMBDA = 0.96
         self.STATE_SHAPE = [84, 84, 3]  # RGB
@@ -42,11 +43,11 @@ class Configuration:
 
         # Additional inputs
         self.GOAL_ON = True
-        self.PREV_REWARD_ON = True
+        self.PREV_REWARD_ON = False
         self.PREV_ACTION_ON = True
 
         # RL rewards
-        self.GOAL_DIRECTION_REWARD = 1.0
+        self.GOAL_DIRECTION_REWARD = 2.0
         self.GOAL_ARRIVAL_REWARD = 2.0
         self.CRASH_REWARD = -10.0
         self.CONTROL_EFFORT_REWARD_MULTIPLIER = -0.75 / 100
@@ -82,5 +83,14 @@ class Configuration:
         self.MAP_X_MAX = 4000
         self.MAP_Y_MIN = -4000
         self.MAP_Y_MAX = 4000
+
+
+class ScheduledParameter:
+    # set interpolation in schedule.py
+    def __init__(self,  start_value, end_value, start_step, end_step):
+        self.START_STEP = start_step
+        self.END_STEP = end_step
+        self.START_VALUE = start_value
+        self.END_VALUE = end_value
 
 

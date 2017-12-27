@@ -6,11 +6,15 @@ from logger import TestLogger, CumulativeStepsLogger
 from config import Configuration
 import tf_utils
 import network as net
+from schedule import Schedule
+import ucv_utils
 import re
 
 
 def main(mode, steps):
+    start_step = ucv_utils.get_global_steps()
     config = Configuration(mode, steps)
+    schedule = Schedule(config)
     model_path = config.MODEL_PATH
     tf.reset_default_graph()
 
@@ -22,10 +26,11 @@ def main(mode, steps):
         # initializing a master network
         global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
         global_steps = tf.Variable(0, dtype=tf.int32, name='global_steps', trainable=False)
-        # trainer = tf.train.AdamOptimizer(learning_rate=config.LEARNING_RATE)
+        # trainer = tf.train.AdamOptimizer(learning_rate=schedule.learning_rate(start_step))
         trainer = None
         master_network = net.ACNetwork('global', None, config)
         var_to_restore = tf_utils.get_variables_to_restore()
+        print('Learning rate set to {}'.format(schedule.learning_rate(start_step)))
         saver = tf.train.Saver(var_to_restore, max_to_keep=1000)
 
         if config.TRAIN_MODE:
@@ -33,7 +38,7 @@ def main(mode, steps):
             workers = []
             logger_steps = CumulativeStepsLogger()
             for i in range(config.NUM_WORKERS):
-                workers.append(net.Worker(i, trainer, global_episodes, global_steps, logger_steps, config))
+                workers.append(net.Worker(i, trainer, global_episodes, global_steps, logger_steps, config, start_step))
 
         else:
             # initializing players for evaluation
