@@ -28,7 +28,7 @@ def main(mode, steps):
         global_steps = tf.Variable(0, dtype=tf.int32, name='global_steps', trainable=False)
         # trainer = tf.train.AdamOptimizer(learning_rate=schedule.learning_rate(start_step))
         trainer = None
-        master_network = net.ACNetwork('global', None, config)
+        master_network = net.ACNetwork('global', None, config, start_step)
         var_to_restore = tf_utils.get_variables_to_restore()
         print('Learning rate set to {}'.format(schedule.learning_rate(start_step)))
         saver = tf.train.Saver(var_to_restore, max_to_keep=1000)
