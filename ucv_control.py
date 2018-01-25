@@ -24,16 +24,20 @@ with tf.device("/cpu:0"):
     cumulative_steps = CumulativeStepsLogger()
     for i in range(Config.NUM_WORKERS):
         workers.append(net.Worker(i, trainer, global_episodes, cumulative_steps))
-    saver = tf.train.Saver()
+    saver = tf.train.Saver(max_to_keep=1000)
+    gpu_options = tf.GPUOptions(visible_device_list='0')
 
-with tf.Session() as sess:
+with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     coord = tf.train.Coordinator()
 
     # weight initialization
     if Config.LOAD_MODEL:
         print('Loading model...')
         ckpt = tf.train.get_checkpoint_state(model_path)
-        saver.restore(sess, ckpt.model_checkpoint_path)
+        if ckpt != None:
+            saver.restore(sess, ckpt.model_checkpoint_path)
+        else:
+            sess.run(tf.global_variables_initializer())
     else:
         sess.run(tf.global_variables_initializer())
 

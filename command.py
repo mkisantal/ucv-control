@@ -335,6 +335,7 @@ class Commander:
             goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
             goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
             start_x, start_y = self.random_start_location(random_heading[1])
+            #print('DO NOT FORGET TO RESET START AND GOAL LOCATIONS TO RANDOM!!!!!!!!!!')
             # goal_x = 4000
             # goal_y = -4000
             # start_x = -4000

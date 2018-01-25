@@ -38,7 +38,8 @@ class Player:
 
         reward = self.env.action(self.actions[a])
         self.steps += 1
-        if self.steps > Config.MAX_EPISODE_LENGTH:
+        print(self.steps)
+        if self.steps > 800:
             print('Reset.')
             self.steps = 0
             self.episode_count += 1
@@ -73,7 +74,7 @@ if __name__ == '__main__':
         model_path = './model'
         ckpt = tf.train.get_checkpoint_state(model_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
-        while player.episode_count < 20:
+        while player.episode_count < 12:
             try:
                 player.play(sess)
             except KeyboardInterrupt:
