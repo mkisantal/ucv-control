@@ -38,34 +38,35 @@ class ACNetwork:
 
         # Graph Definition
         with tf.variable_scope(scope):
-            # input image
-            self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)
+            with tf.variable_scope('encoder'):
+                # input image
+                self.inputs = tf.placeholder(shape=[None]+Config.STATE_SHAPE, dtype=tf.float32)
 
-            # one-hot depth labels for each depth pixel
-            self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
+                # one-hot depth labels for each depth pixel
+                self.aux_depth_labels = [tf.placeholder(shape=[None] + [8], dtype=tf.float32) for i in range(4*16)]
 
-            # sin(heading_error)
-            self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32)
+                # sin(heading_error)
+                self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32)
 
-            # convolutional encoder
-            self.conv1 = slim.conv2d(inputs=self.inputs,
-                                     num_outputs=16,
-                                     kernel_size=[8, 8],
-                                     stride=[4, 4],
-                                     padding='VALID',
-                                     activation_fn=tf.nn.elu)
-            self.conv2 = slim.conv2d(inputs=self.conv1,
-                                     num_outputs=32,
-                                     kernel_size=[4, 4],
-                                     stride=[2, 2],
-                                     padding='VALID',
-                                     activation_fn=tf.nn.elu)
-            hidden = slim.fully_connected(slim.flatten(self.conv2), 256, activation_fn=tf.nn.elu)
+                # convolutional encoder
+                self.conv1 = slim.conv2d(inputs=self.inputs,
+                                         num_outputs=16,
+                                         kernel_size=[8, 8],
+                                         stride=[4, 4],
+                                         padding='VALID',
+                                         activation_fn=tf.nn.elu)
+                self.conv2 = slim.conv2d(inputs=self.conv1,
+                                         num_outputs=32,
+                                         kernel_size=[4, 4],
+                                         stride=[2, 2],
+                                         padding='VALID',
+                                         activation_fn=tf.nn.elu)
+                hidden = slim.fully_connected(slim.flatten(self.conv2), 256, activation_fn=tf.nn.elu)
 
-            layers_to_concatenate = [hidden]
-            if Config.GOAL_ON:
-                layers_to_concatenate.append(self.direction_input)
-            concatenated = tf.concat(layers_to_concatenate, axis=1)
+                layers_to_concatenate = [hidden]
+                if Config.GOAL_ON:
+                    layers_to_concatenate.append(self.direction_input)
+                concatenated = tf.concat(layers_to_concatenate, axis=1)
 
             # LSTM layer
             if Config.USE_LSTM:
@@ -103,10 +104,11 @@ class ACNetwork:
 
             # auxiliary outputs
             if Config.AUX_TASK_D2:
-                self.aux_depth2_hidden = slim.fully_connected(hidden2, 128, activation_fn=tf.nn.elu)
-                self.aux_depth2_logits = [
-                    slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
-                    for i in range(4*16)]
+                with tf.variable_scope('aux_depth'):
+                    self.aux_depth2_hidden = slim.fully_connected(hidden2, 128, activation_fn=tf.nn.elu)
+                    self.aux_depth2_logits = [
+                        slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
+                        for i in range(4*16)]
 
             # loss functions
             if scope != 'global':

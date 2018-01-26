@@ -7,6 +7,9 @@ class Config:
     MODEL_SAVE_FREQ = 25
     VERBOSITY = 1
 
+    # Neural Network Settings
+    USE_LSTM = False
+
     # Basic RL settings
     MAX_EPISODE_LENGTH = 30
     GAMMA = 0.99
