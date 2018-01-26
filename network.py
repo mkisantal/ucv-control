@@ -345,7 +345,7 @@ class Worker:
                     self.summary_writer.flush()
                 if self.name == 'worker_0':
                     sess.run(self.increment)
-                print('--- worker_0 {}'.format(episode_count))
+                    print('--- worker_0 {}'.format(episode_count))
                 if episode_count > Config.MAX_EPISODES:
                     coord.request_stop()
                 episode_count += 1
