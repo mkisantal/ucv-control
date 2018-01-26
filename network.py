@@ -62,35 +62,40 @@ class ACNetwork:
                                      activation_fn=tf.nn.elu)
             hidden = slim.fully_connected(slim.flatten(self.conv2), 256, activation_fn=tf.nn.elu)
 
-            # LSTM layer
-            lstm_cell = rnn.BasicLSTMCell(256, state_is_tuple=True)
-            c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
-            h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
-            self.state_init = [c_init, h_init]
-            c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
-            h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+            layers_to_concatenate = [hidden]
             if Config.GOAL_ON:
-                rnn_in = tf.expand_dims(tf.concat((hidden, self.direction_input), axis=1), [0])  # goal direction input
+                layers_to_concatenate.append(self.direction_input)
+            concatenated = tf.concat(layers_to_concatenate, axis=1)
+
+            # LSTM layer
+            if Config.USE_LSTM:
+                lstm_cell = rnn.BasicLSTMCell(256, state_is_tuple=True)
+                c_init = np.zeros((1, lstm_cell.state_size.c), np.float32)
+                h_init = np.zeros((1, lstm_cell.state_size.h), np.float32)
+                self.state_init = [c_init, h_init]
+                c_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.c])
+                h_in = tf.placeholder(tf.float32, [1, lstm_cell.state_size.h])
+                rnn_in = tf.expand_dims(concatenated, [0])
+                step_size = tf.shape(self.inputs)[:1]
+                self.state_in = rnn.LSTMStateTuple(c_in, h_in)
+                lstm_outputs, lstm_state = \
+                    tf.nn.dynamic_rnn(lstm_cell,
+                                      rnn_in,
+                                      sequence_length=step_size,
+                                      initial_state=self.state_in,
+                                      time_major=False)
+                lstm_c, lstm_h = lstm_state
+                self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
+                hidden2 = tf.reshape(lstm_outputs, [-1, 256])
             else:
-                rnn_in = tf.expand_dims(hidden, [0])
-            step_size = tf.shape(self.inputs)[:1]
-            self.state_in = rnn.LSTMStateTuple(c_in, h_in)
-            lstm_outputs, lstm_state = \
-                tf.nn.dynamic_rnn(lstm_cell,
-                                  rnn_in,
-                                  sequence_length=step_size,
-                                  initial_state=self.state_in,
-                                  time_major=False)
-            lstm_c, lstm_h = lstm_state
-            self.state_out = (lstm_c[:1, :], lstm_h[:1, :])
-            rnn_out = tf.reshape(lstm_outputs, [-1, 256])
+                hidden2 = slim.fully_connected(concatenated, 256, activation_fn=tf.nn.elu)
 
             # output layers
-            self.policy = slim.fully_connected(rnn_out, Config.ACTIONS,
+            self.policy = slim.fully_connected(hidden2, Config.ACTIONS,
                                                activation_fn=tf.nn.softmax,
                                                weights_initializer=normalized_columns_initializer(0.01),
                                                biases_initializer=None)
-            self.value = slim.fully_connected(rnn_out, 1,
+            self.value = slim.fully_connected(hidden2, 1,
                                               activation_fn=None,
                                               weights_initializer=normalized_columns_initializer(1.0),
                                               biases_initializer=None
@@ -98,7 +103,7 @@ class ACNetwork:
 
             # auxiliary outputs
             if Config.AUX_TASK_D2:
-                self.aux_depth2_hidden = slim.fully_connected(rnn_out, 128, activation_fn=tf.nn.elu)
+                self.aux_depth2_hidden = slim.fully_connected(hidden2, 128, activation_fn=tf.nn.elu)
                 self.aux_depth2_logits = [
                     slim.fully_connected(self.aux_depth2_hidden, 8, activation_fn=None)  # , scope='d2_logits'
                     for i in range(4*16)]
@@ -181,14 +186,15 @@ class Worker:
         advantages = rewards + gamma * value_plus[1:] - value_plus[:-1]   # GAE?
         advantages = discount(advantages, gamma)
 
-        rnn_state = self.local_AC.state_init
         feed_dict = {self.local_AC.target_v: discounted_rewards,
                      self.local_AC.inputs: np.vstack(np.expand_dims(obs, 0) for obs in observations),
                      self.local_AC.actions: actions,
-                     self.local_AC.advantages: advantages,
-                     self.local_AC.state_in[0]: rnn_state[0],
-                     self.local_AC.state_in[1]: rnn_state[1]
+                     self.local_AC.advantages: advantages
                      }
+        if Config.USE_LSTM:
+            rnn_state = self.local_AC.state_init
+            feed_dict.update({self.local_AC.state_in[0]: rnn_state[0],
+                              self.local_AC.state_in[1]: rnn_state[1]})
 
         ops_for_run = [self.local_AC.value_loss,
                        self.local_AC.policy_loss,
@@ -242,21 +248,24 @@ class Worker:
                     aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
                 if Config.GOAL_ON:
                     goal_direction = self.env.get_goal_direction()
-                rnn_state = self.local_AC.state_init
+                if Config.USE_LSTM:
+                    rnn_state = self.local_AC.state_init
 
                 # Episode Loop
                 while self.env.is_episode_finished() is False:
 
                     # running network for action selection
-                    feed_dict = {self.local_AC.inputs: [s],
-                                 self.local_AC.state_in[0]: rnn_state[0],
-                                 self.local_AC.state_in[1]: rnn_state[1]}
+                    feed_dict = {self.local_AC.inputs: [s]}
+                    ops_to_run = [self.local_AC.policy, self.local_AC.value]
                     if Config.GOAL_ON:
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
-                    a_dist, v, rnn_state = sess.run([self.local_AC.policy,
-                                                     self.local_AC.value,
-                                                     self.local_AC.state_out],
-                                                    feed_dict=feed_dict)
+                    if Config.USE_LSTM:
+                        feed_dict.update({self.local_AC.state_in[0]: rnn_state[0],
+                                          self.local_AC.state_in[1]: rnn_state[1]})
+                        ops_to_run.append(self.local_AC.state_out)
+                        a_dist, v, rnn_state = sess.run(ops_to_run, feed_dict=feed_dict)
+                    else:
+                        a_dist, v = sess.run(ops_to_run, feed_dict=feed_dict)
                     a = np.random.choice(a_dist[0], p=a_dist[0])
                     a = np.argmax(a_dist == a)
 
@@ -287,9 +296,10 @@ class Worker:
 
                     # running training step at the end of episode
                     if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != Config.MAX_EPISODE_LENGTH):
-                        feed_dict_v = {self.local_AC.inputs: [s],
-                                       self.local_AC.state_in[0]: rnn_state[0],
-                                       self.local_AC.state_in[1]: rnn_state[1]}
+                        feed_dict_v = {self.local_AC.inputs: [s]}
+                        if Config.USE_LSTM:
+                            feed_dict_v.update({self.local_AC.state_in[0]: rnn_state[0],
+                                                self.local_AC.state_in[1]: rnn_state[1]})
                         if Config.GOAL_ON:
                             feed_dict_v.update({self.local_AC.direction_input: goal_direction})
                         v1 = sess.run(self.local_AC.value,
@@ -333,9 +343,9 @@ class Worker:
                     self.summary_writer.flush()
                 if self.name == 'worker_0':
                     sess.run(self.increment)
-		    print('--- worker_0 {}'.format(episode_count))
-                    if episode_count > Config.MAX_EPISODES:
-                        coord.request_stop()
+                print('--- worker_0 {}'.format(episode_count))
+                if episode_count > Config.MAX_EPISODES:
+                    coord.request_stop()
                 episode_count += 1
 
             # shutting down client and sim

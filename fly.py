@@ -20,11 +20,15 @@ class Player:
 
         if self.s is None or self.rnn_state is None:    # first step
             self.s = self.env.get_observation()
-            self.rnn_state = self.network.state_init
+            if Config.USE_LSTM:
+                self.rnn_state = self.network.state_init
 
-        feed_dict = {self.network.inputs: [self.env.get_observation()],
-                     self.network.state_in[0]: self.network.state_init[0],
-                     self.network.state_in[1]: self.network.state_init[1]}
+        feed_dict = {self.network.inputs: [self.env.get_observation()]}
+        ops_to_run = [self.network.policy]
+        if Config.USE_LSTM:
+            feed_dict.update({self.network.state_in[0]: self.rnn_state[0],
+                              self.network.state_in[1]: self.rnn_state[1]})
+            ops_to_run.append(self.network.state_out)
         if Config.GOAL_ON:
             goal_direction = self.env.get_goal_direction()
             feed_dict.update({self.network.direction_input: goal_direction})
@@ -33,7 +37,10 @@ class Player:
             cmd.get_observation(viewmode='depth')
             pass
 
-        a_dist, self.rnn_state = session.run([self.network.policy, self.network.state_out], feed_dict=feed_dict)
+        if Config.USE_LSTM:
+            a_dist, self.rnn_state = session.run(ops_to_run, feed_dict=feed_dict)
+        else:
+            a_dist = session.run(ops_to_run, feed_dict=feed_dict)
         a = np.argmax(a_dist)
 
         reward = self.env.action(self.actions[a])
