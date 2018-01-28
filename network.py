@@ -47,6 +47,9 @@ class ACNetwork:
             # sin(heading_error)
             self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32)
 
+            # angular velocity state
+            self.velocity_state = tf.placeholder(shape=[None, 1], dtype=tf.float32)
+
             # convolutional encoder
             self.conv1 = slim.conv2d(inputs=self.inputs,
                                      num_outputs=16,
@@ -171,7 +174,11 @@ class Worker:
         if Config.AUX_TASK_D2:
             aux_depth = rollout[:, 6]
         if Config.GOAL_ON:
-            goal_vector = np.vstack(gv for gv in rollout[:, -1])    # TODO: won't work with more aux tasks or additional inputs
+            goal_vector = np.vstack(gv for gv in rollout[:, -2])    # TODO: won't work with more aux tasks or additional inputs
+        if Config.ACCELERATION_ACTIONS:
+            velocity_state = np.vstack(vs for vs in rollout[:, -1])
+        else:
+            raise Exception('Change goal vector index in experiences in network.py if not using acceleration actions!')
         identity = np.eye(8)
 
         # calculating discounted return for each step
@@ -207,7 +214,8 @@ class Worker:
         if Config.GOAL_ON:
             feed_dict.update({self.local_AC.direction_input: goal_vector})
             # v_l, p_l, e_l, g_n, v_n, _ = sess.run(ops_for_run, feed_dict=feed_dict)
-
+        if Config.ACCELERATION_ACTIONS:
+            feed_dict.update({self.local_AC.velocity_state: velocity_state})
         # calculate losses and gradients
         results = sess.run(ops_for_run, feed_dict=feed_dict)
         v_l, p_l, e_l = results[:3]
@@ -242,6 +250,8 @@ class Worker:
                     aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
                 if Config.GOAL_ON:
                     goal_direction = self.env.get_goal_direction()
+                if Config.ACCELERATION_ACTIONS:
+                    velocity_state = self.env.get_velocity_state()
                 rnn_state = self.local_AC.state_init
 
                 # Episode Loop
@@ -253,6 +263,8 @@ class Worker:
                                  self.local_AC.state_in[1]: rnn_state[1]}
                     if Config.GOAL_ON:
                         feed_dict.update({self.local_AC.direction_input: goal_direction})
+                    if Config.ACCELERATION_ACTIONS:
+                        feed_dict.update({self.local_AC.velocity_state: velocity_state})
                     a_dist, v, rnn_state = sess.run([self.local_AC.policy,
                                                      self.local_AC.value,
                                                      self.local_AC.state_out],
@@ -277,6 +289,9 @@ class Worker:
                     if Config.GOAL_ON:
                         goal_direction = self.env.get_goal_direction()
                         episode_experiences.append(goal_direction)
+                    if Config.ACCELERATION_ACTIONS:
+                        velocity_state = self.env.get_velocity_state()
+                        episode_experiences.append(velocity_state)
                     episode_buffer.append(episode_experiences)
                     episode_values.append(v[0, 0])
 

@@ -15,6 +15,7 @@ class Config:
     NUM_WORKERS = 8
     MAX_EPISODES = 9000
     GOAL_ON = True
+    ACCELERATION_ACTIONS = True
 
     # Auxiliary tasks
     AUX_TASK_D2 = True
