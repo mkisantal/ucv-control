@@ -144,8 +144,8 @@ if __name__ == '__main__':
     ax = fig.add_subplot(111, aspect='equal')
     plt.ion()
     plt.show()
-    draw_labyrinth(ax)
-    # draw_forest(ax)
+    # draw_labyrinth(ax)
+    draw_forest(ax)
 
     counter = 0
     for trajectory in trajectories:
