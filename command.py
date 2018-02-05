@@ -198,7 +198,9 @@ class Commander:
     def reset_agent(self):
 
         """ Reset the agent to continue interaction in the state where it was interrupted. """
-
+        if len(self.trajectory) == 0:
+            self.new_episode()
+            return
         new_loc = self.trajectory[-1]["location"]
         new_rot = self.trajectory[-1]["rotation"]
         res1 = self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*new_rot))
@@ -266,11 +268,12 @@ class Commander:
         disp = np.array(displacement)
         goal_distance = np.linalg.norm(np.subtract(loc, self.goal_location))
         if goal_distance < 200.0:  # closer than 2 meter to the goal
-            return self.goal_direction_reward  # TODO: terminate episode!
-        norm_displacement = np.array(displacement) / self.speed
-        norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
-                           / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
-        reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
+            reward = self.goal_direction_reward  # TODO: terminate episode!
+	else:
+            norm_displacement = np.array(displacement) / self.speed
+            norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
+                               / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
+            reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
         if collision:
             reward += self.crash_reward
             self.episode_finished = True
@@ -347,6 +350,70 @@ class Commander:
                 collision_at_start = False
 
         return start_x, start_y
+
+    def get_valid_start_location(self):
+        dist = 6000
+        random_start_x = None
+        random_start_y = None
+        goal_x = None
+        goal_y = None
+        heading = None
+
+        valid_locations = False
+        while not valid_locations:
+            random_start_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
+            random_start_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+                
+            for i in range(10):
+                heading = randint(0,360)
+                goal_x = random_start_x + dist * math.cos(math.radians(heading))
+                goal_y = random_start_y + dist * math.sin(math.radians(heading))
+
+                if Config.MAP_X_MIN <= goal_x <= Config.MAP_X_MAX and Config.MAP_Y_MIN <= goal_y <= Config.MAP_Y_MAX:
+                    valid_locations = True
+                    break
+
+        return random_start_x, random_start_y, goal_x, goal_y, heading
+
+    def eval_start_location(self):
+
+        collision_at_start = True
+        while collision_at_start:
+            # spawn location is ok, if we can move forward a bit without colliding
+            start_x, start_y, goal_x, goal_y, heading = self.get_valid_start_location()
+            self.request('vset /camera/0/pose {} {} {} {} {} {}'.format(start_x, start_y, 150, 0, heading, 0))
+            step = 50
+            small_step_forward = (start_x + step * math.cos(math.radians(heading)),
+                                  start_y + step * math.sin(math.radians(heading)), 150.0)
+            self.request('vset /camera/0/moveto {} {} {}'.format(*small_step_forward))
+            final_loc = [round(float(v), 2) for v in self.request('vget /camera/0/location').split(' ')]
+            if final_loc == [round(v, 2) for v in small_step_forward]:
+                # acceptable start location found
+                collision_at_start = False
+
+        return start_x, start_y, goal_x, goal_y, heading
+
+    def new_eval_episode(self, save_trajectory=False):
+        if save_trajectory:
+            self.save_trajectory()
+
+        start_x, start_y, goal_x, goal_y, heading = self.eval_start_location()
+        start_loc = (start_x, start_y, 150)
+        random_heading = (0.0, float(heading), 0.0)
+        self.goal_location = (goal_x, goal_y, 150)
+
+        self.trajectory = []
+        loc = [float(v) for v in start_loc]
+        rot = [float(v) for v in random_heading]
+        self.trajectory.append(dict(location=loc, rotation=rot))
+
+        self.request('vset /camera/0/location {:.2f} {:.2f} {:.2f}'.format(*start_loc))   # teleport agent
+        self.request('vset /camera/0/rotation {:.3f} {:.3f} {:.3f}'.format(*random_heading))
+
+        self.episode_finished = False
+        return
+
+ 
 
     def new_episode(self, save_trajectory=False, start=None, goal=None):
 
