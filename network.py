@@ -166,6 +166,7 @@ class Worker:
         self.local_AC = ACNetwork(self.name, trainer)
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
+        self.batch_rnn_state_init = None
 
     def train(self, rollout, bootstrap_value, gamma, sess):
 
@@ -201,9 +202,8 @@ class Worker:
                      self.local_AC.advantages: advantages
                      }
         if Config.USE_LSTM:
-            rnn_state = self.local_AC.state_init
-            feed_dict.update({self.local_AC.state_in[0]: rnn_state[0],
-                              self.local_AC.state_in[1]: rnn_state[1]})
+            feed_dict.update({self.local_AC.state_in[0]: self.batch_rnn_state_init[0],
+                              self.local_AC.state_in[1]: self.batch_rnn_state_init[1]})
 
         ops_for_run = [self.local_AC.value_loss,
                        self.local_AC.policy_loss,
@@ -254,21 +254,19 @@ class Worker:
                 self.env.new_episode()
                 s = self.env.get_observation()
                 episode_frames.append(s)
+
                 if Config.AUX_TASK_D2:
                     aux_depth = np.expand_dims(self.env.get_observation(viewmode='depth').flatten(), 0)
                 if Config.GOAL_ON:
                     goal_direction = self.env.get_goal_direction()
-
                 if Config.USE_LSTM:
-                    rnn_state = self.local_AC.state_init
-
+                    current_rnn_state = self.local_AC.state_init
+                    self.batch_rnn_state_init = current_rnn_state
                 if Config.ACCELERATION_ACTIONS:
                     velocity_state = self.env.get_velocity_state()
 
-
                 # Episode Loop
                 while self.env.is_episode_finished() is False:
-
                     # running network for action selection
                     feed_dict = {self.local_AC.inputs: [s]}
                     ops_to_run = [self.local_AC.policy, self.local_AC.value]
@@ -279,10 +277,10 @@ class Worker:
                         feed_dict.update({self.local_AC.velocity_state: velocity_state})
 
                     if Config.USE_LSTM:
-                        feed_dict.update({self.local_AC.state_in[0]: rnn_state[0],
-                                          self.local_AC.state_in[1]: rnn_state[1]})
+                        feed_dict.update({self.local_AC.state_in[0]: current_rnn_state[0],
+                                          self.local_AC.state_in[1]: current_rnn_state[1]})
                         ops_to_run.append(self.local_AC.state_out)
-                        a_dist, v, rnn_state = sess.run(ops_to_run, feed_dict=feed_dict)
+                        a_dist, v, current_rnn_state = sess.run(ops_to_run, feed_dict=feed_dict)
                     else:
                         a_dist, v = sess.run(ops_to_run, feed_dict=feed_dict)
 
@@ -317,12 +315,13 @@ class Worker:
                     total_steps += 1
                     episode_step_count += 1
 
-                    # running training step at the end of episode
-                    if (len(episode_buffer) == 30) and (d is not True) and (episode_step_count != Config.MAX_EPISODE_LENGTH):
+                    # running training step at the end of rollout
+                    if ((len(episode_buffer) == Config.STEPS_FOR_UPDATE) and (d is not True))\
+                            or (episode_step_count == Config.MAX_EPISODE_LENGTH):
                         feed_dict_v = {self.local_AC.inputs: [s]}
                         if Config.USE_LSTM:
-                            feed_dict_v.update({self.local_AC.state_in[0]: rnn_state[0],
-                                                self.local_AC.state_in[1]: rnn_state[1]})
+                            feed_dict_v.update({self.local_AC.state_in[0]: current_rnn_state[0],
+                                                self.local_AC.state_in[1]: current_rnn_state[1]})
                         if Config.GOAL_ON:
                             feed_dict_v.update({self.local_AC.direction_input: goal_direction})
                         v1 = sess.run(self.local_AC.value,
@@ -330,16 +329,25 @@ class Worker:
                         v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, Config.GAMMA, sess)
                         episode_buffer = []
                         sess.run(self.update_local_ops)
-                    if d or (episode_step_count == Config.MAX_EPISODE_LENGTH - 1):
+                        if Config.USE_LSTM:
+                            self.batch_rnn_state_init = current_rnn_state
+
+                    # training step at episode termination (crash or goal reached) without bootstrapping
+                    if d:
+                        if len(episode_buffer) != 0:
+                            v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, Config.GAMMA, sess)
+                            episode_buffer = []
+                        if Config.USE_LSTM:
+                            self.batch_rnn_state_init = current_rnn_state
+
+                    if episode_step_count == Config.MAX_EPISODE_LENGTH:
                         break
+                # End of episode loop
 
                 # Summary writing, model saving, etc.
                 self.episode_rewards.append(episode_reward)
                 self.episode_lengths.append(episode_step_count)
                 self.episode_mean_values.append(np.mean(episode_values))
-
-                if len(episode_buffer) != 0:
-                    v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, 0.0, Config.GAMMA, sess)
 
                 if episode_count % 5 == 0 and episode_step_count != 0:
                     if episode_count % Config.MODEL_SAVE_FREQ == 0 and self.name == 'worker_0':
