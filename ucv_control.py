@@ -16,14 +16,15 @@ with tf.device("/cpu:0"):
 
     # initializing a master network
     global_episodes = tf.Variable(0, dtype=tf.int32, name='global_episodes', trainable=False)
+    global_steps = tf.Variable(0, dtype=tf.int32, name='global_steps', trainable=False)
     trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
     master_network = net.ACNetwork('global', None)
 
     # initializing workers
     workers = []
-    cumulative_steps = CumulativeStepsLogger()
+    logger_steps = CumulativeStepsLogger()
     for i in range(Config.NUM_WORKERS):
-        workers.append(net.Worker(i, trainer, global_episodes, cumulative_steps))
+        workers.append(net.Worker(i, trainer, global_episodes, global_steps, logger_steps))
     saver = tf.train.Saver(max_to_keep=1000)
     gpu_options = tf.GPUOptions(visible_device_list='0')
 
@@ -44,7 +45,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     # starting logger threads
     logger = TestLogger(workers)
     threading.Thread(target=lambda: logger.work()).start()
-    threading.Thread(target=lambda: cumulative_steps.work()).start()
+    threading.Thread(target=lambda: logger_steps.work()).start()
     worker_threads = []
     for worker in workers:
         worker_work = lambda: worker.work(sess, coord, saver)
@@ -69,6 +70,6 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 
     # stop training
     logger.should_stop = True
-    cumulative_steps.should_stop = True
+    logger_steps.should_stop = True
     coord.join(worker_threads)
 print('Tot ziens')

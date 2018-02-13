@@ -4,8 +4,9 @@ class Config:
     # Training Settings
     LOAD_MODEL = True
     MODEL_PATH = './model'
-    MODEL_SAVE_FREQ = 25
     VERBOSITY = 1
+    LOGGING_PERIOD = 500
+    MODEL_SAVE_PERIOD = 1e4
 
     # Neural Network Settings
     USE_LSTM = False
@@ -17,7 +18,7 @@ class Config:
     STATE_SHAPE = [84, 84, 3]  # RGB
     ACTIONS = 3
     NUM_WORKERS = 8
-    MAX_EPISODES = 9000
+    MAX_STEPS = 2e6
     GOAL_ON = True
     ACCELERATION_ACTIONS = True
 
