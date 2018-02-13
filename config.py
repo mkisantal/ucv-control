@@ -25,6 +25,15 @@ class Config:
     # Auxiliary tasks
     AUX_TASK_D2 = True
 
+    # Evaluation
+    EVAL_MODE = True
+    MAX_EVALUATION_EPISODE_LENGTH = 10
+    EPISODES_FOR_EVAL = 2
+    EVAL_GOAL_X = 4000
+    EVAL_GOAL_Y = -4000
+    EVAL_START_X = -4000
+    EVAL_START_Y = 4000
+
     # Simulator settings
     HOST = 'localhost'
     PORT = 9000

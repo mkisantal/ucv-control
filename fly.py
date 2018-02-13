@@ -9,7 +9,7 @@ class Player:
     def __init__(self, env):
         self.network = net.ACNetwork('global', None)
         self.env = env
-        self.env.new_eval_episode(save_trajectory=False)
+        self.env.new_episode(save_trajectory=False)
         self.s = None
         self.rnn_state = None
         self.actions = self.env.action_space
@@ -41,19 +41,19 @@ class Player:
             a_dist, self.rnn_state = session.run(ops_to_run, feed_dict=feed_dict)
         else:
             a_dist = session.run(ops_to_run, feed_dict=feed_dict)
-        #a = np.argmax(a_dist) # deterministic eval
-        a = np.random.choice(a_dist[0], p=a_dist[0])
+        # a = np.argmax(a_dist) # deterministic eval
+        a = np.random.choice(a_dist[0][0], p=a_dist[0][0])
         a = np.argmax(a_dist == a)
 
         reward = self.env.action(self.actions[a])
         self.steps += 1
         print(self.steps)
-        if self.steps > 1000:
+        if self.steps > Config.MAX_EVALUATION_EPISODE_LENGTH:
             print('Reset.')
             self.steps = 0
             self.episode_count += 1
             print(self.episode_count)
-            self.env.new_eval_episode(save_trajectory=True)
+            self.env.new_episode(save_trajectory=True)
             self.rnn_state = None
             self.s = None
         print('Reward: {}'.format(reward))
@@ -61,7 +61,7 @@ class Player:
             print('Collision.')
             self.episode_count += 1
             print(self.episode_count)
-            self.env.new_eval_episode(save_trajectory=True)
+            self.env.new_episode(save_trajectory=True)
             self.steps = 0
             self.rnn_state = None
             self.s = None
@@ -71,6 +71,10 @@ class Player:
 
 
 if __name__ == '__main__':
+
+    if not Config.EVAL_MODE:
+        print('\nNot in evaluation mode.\nPlease set EVAL_MODE in Config to \'True\'! Shutting down...')
+        exit()
 
     cmd = Commander(0)
 
@@ -83,7 +87,7 @@ if __name__ == '__main__':
         model_path = './model'
         ckpt = tf.train.get_checkpoint_state(model_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
-        while player.episode_count < 2000:
+        while player.episode_count < Config.EPISODES_FOR_EVAL:
             try:
                 player.play(sess)
             except KeyboardInterrupt:

@@ -23,7 +23,7 @@ class Commander:
         self.trajectory = []
         self.name = 'worker_' + str(number)
         self.port = 7000 + number * 100
-	self.number = number
+        self.number = number
 
         # navigation goal direction
         self.goal_location = None
@@ -413,8 +413,6 @@ class Commander:
         self.episode_finished = False
         return
 
- 
-
     def new_episode(self, save_trajectory=False, start=None, goal=None):
 
         """ Choose new start and goal locations, replace agent. """
@@ -425,14 +423,15 @@ class Commander:
         # choose random respawn and goal locations, either randomly or from a list of predetermined locations
         random_heading = (0.0, randint(0, 360), 0.0)
         if Config.RANDOM_SPAWN_LOCATIONS:
-            goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
-            goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
-            start_x, start_y = self.random_start_location(random_heading[1])
-            #print('DO NOT FORGET TO RESET START AND GOAL LOCATIONS TO RANDOM!!!!!!!!!!')
-            # goal_x = 4000
-            # goal_y = -4000
-            # start_x = -4000
-            # start_y = 4000
+            if Config.EVAL_MODE:
+                goal_x = Config.EVAL_GOAL_X
+                goal_y = Config.EVAL_GOAL_Y
+                start_x = Config.EVAL_START_X
+                start_y = Config.EVAL_START_Y
+            else:
+                goal_x = randint(Config.MAP_X_MIN, Config.MAP_X_MAX)
+                goal_y = randint(Config.MAP_Y_MIN, Config.MAP_Y_MAX)
+                start_x, start_y = self.random_start_location(random_heading[1])
             start_loc = (start_x, start_y, 150)
             self.goal_location = (goal_x, goal_y, 150)
         else:
