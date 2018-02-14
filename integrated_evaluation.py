@@ -46,8 +46,8 @@ def coordinate_evaluation(worker_list, coord):
             if finished_episode_count > finished_episodes:
                 finished_episodes = finished_episode_count
                 print('Waiting for {} episodes to complete.'.format(
-                    Config.MAX_EPISODES_FOR_EVAL - finished_episode_count))
-            if finished_episode_count >= Config.MAX_EPISODES_FOR_EVAL:
+                    Config.EPISODES_FOR_EVAL - finished_episode_count))
+            if finished_episode_count >= Config.EPISODES_FOR_EVAL:
                 all_episodes_ended = True
         except KeyboardInterrupt:
             print('terminating threads.....')

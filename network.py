@@ -50,7 +50,7 @@ class ACNetwork:
                 self.direction_input = tf.placeholder(shape=[None, 1], dtype=tf.float32)
 
                 # angular velocity state
-                self.velocity_state = tf.placeholder(shape=[None, 1], dtype=tf.float32)
+                self.velocity_state = tf.placeholder(shape=[None, 1], dtype=tf.float32, name='velocity_state')
 
                 # convolutional encoder
                 self.conv1 = slim.conv2d(inputs=self.inputs,
@@ -70,6 +70,8 @@ class ACNetwork:
                 layers_to_concatenate = [hidden]
                 if Config.GOAL_ON:
                     layers_to_concatenate.append(self.direction_input)
+                if Config.ACCELERATION_ACTIONS:
+                    layers_to_concatenate.append(self.velocity_state)
                 concatenated = tf.concat(layers_to_concatenate, axis=1)
 
             # LSTM layer
@@ -365,6 +367,10 @@ class Worker:
                                                 self.local_AC.state_in[1]: current_rnn_state[1]})
                         if Config.GOAL_ON:
                             feed_dict_v.update({self.local_AC.direction_input: goal_direction})
+                        if Config.ACCELERATION_ACTIONS:
+                            velocity_state = self.env.get_velocity_state()
+                            print('DEBUG: {}, shape: {}'.format(velocity_state, velocity_state.shape))
+                            feed_dict_v.update({self.local_AC.velocity_state: velocity_state})
                         v1 = sess.run(self.local_AC.value,
                                       feed_dict=feed_dict_v)
                         v_l, p_l, e_l, g_n, v_n = self.train(episode_buffer, v1, Config.GAMMA, sess)
@@ -381,7 +387,7 @@ class Worker:
                         if Config.USE_LSTM:
                             self.batch_rnn_state_init = current_rnn_state
 
-                    if episode_step_count == Config.MAX_EPISODE_LENGTH:
+                    if episode_step_count == Config.MAX_EPISODE_LENGTH or self.ongoing_evaluation:
                         break
                 # End of episode loop
 
