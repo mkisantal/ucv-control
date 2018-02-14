@@ -5,6 +5,7 @@ import threading
 from time import sleep
 from logger import TestLogger, CumulativeStepsLogger
 from config import Config
+from integrated_evaluation import coordinate_evaluation
 
 model_path = Config.MODEL_PATH
 tf.reset_default_graph()
@@ -58,12 +59,17 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     while not coord.should_stop():
         try:
             sleep(0.1)
+
+            # monitoring threads
             for i in range(len(worker_threads)):
                 if not worker_threads[i].is_alive():
                     print('Thread {} is dead. Restart attempt...'.format(i))
                     worker_work = lambda: workers[i].work(sess, coord, saver)
                     worker_threads[i] = threading.Thread(target=worker_work)
                     worker_threads[i].start()
+                if workers[0].start_eval:
+                    coordinate_evaluation(workers, coord)
+
         except KeyboardInterrupt:
             print('terminating threads.....')
             coord.request_stop()

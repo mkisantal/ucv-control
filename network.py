@@ -5,6 +5,7 @@ import tensorflow.contrib.rnn as rnn
 import scipy.signal
 from command import Commander
 from config import Config
+from time import sleep
 
 
 def normalized_columns_initializer(std=1.0):
@@ -170,9 +171,22 @@ class Worker:
         self.update_local_ops = update_target_graph('global', self.name)
         self.actions = self.env.action_space
         self.batch_rnn_state_init = None
-
-        self.last_model_save_steps = None
         self.last_log_writing_steps = 0
+
+        if self.name == 'worker_0':
+            self.last_model_save_steps = None
+            self.start_eval = False
+
+        if Config.INTEGRATED_EVAL:
+            self.ongoing_evaluation = False
+            self.start_new_eval_episode = False
+            self.started_eval_episodes = 0
+            self.finished_eval_episodes = 0
+
+            self.eval_rewards = []
+            self.eval_cumulative_rewards = np.array([])
+            self.eval_depth_losses = np.array([])
+            self.eval_trajectories = []
 
     def train(self, rollout, bootstrap_value, gamma, sess):
 
@@ -231,11 +245,14 @@ class Worker:
         if Config.ACCELERATION_ACTIONS:
             feed_dict.update({self.local_AC.velocity_state: velocity_state})
         # calculate losses and gradients
-        results = sess.run(ops_for_run, feed_dict=feed_dict)
-        v_l, p_l, e_l = results[:3]
-        g_n, v_n = results[-3:-1]
-
-        return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
+        if not self.ongoing_evaluation:
+            results = sess.run(ops_for_run, feed_dict=feed_dict)
+            v_l, p_l, e_l = results[:3]
+            g_n, v_n = results[-3:-1]
+            return v_l / len(rollout), p_l / len(rollout), e_l / len(rollout), g_n, v_n
+        else:
+            print('[{}] Training interrupted till evaluation is finished.'.format(self.name))
+            return None, None, None, None, None
 
     def work(self, sess, coord, saver):
 
@@ -251,6 +268,22 @@ class Worker:
             while not coord.should_stop():
                 # initializing episode
                 sess.run(self.update_local_ops)
+
+                if Config.INTEGRATED_EVAL:
+                    if self.ongoing_evaluation:
+                        if self.start_new_eval_episode:
+                            # self.run_eval_episode(sess)
+                            self.started_eval_episodes += 1
+                            rewards, cumulative_reward, depthloss, traj = self.eval_run(sess)
+
+                            self.eval_rewards.append(rewards)
+                            self.eval_cumulative_rewards = np.append(self.eval_cumulative_rewards, cumulative_reward)
+                            self.eval_depth_losses = np.append(self.eval_depth_losses, depthloss)
+                            self.eval_trajectories.append(traj)
+                            self.finished_eval_episodes += 1
+                        sleep(2)
+                        continue
+
                 episode_buffer = []
                 episode_values = []
                 episode_frames = []
@@ -360,7 +393,7 @@ class Worker:
                 current_global_steps = sess.run(self.global_steps)
 
                 steps_since_log = self.local_steps - self.last_log_writing_steps
-                if steps_since_log > Config.LOGGING_PERIOD:
+                if (steps_since_log > Config.LOGGING_PERIOD) and (v_l is not None):
                     mean_reward = np.mean(self.episode_rewards[-5:])
                     mean_length = np.mean(self.episode_lengths[-5:])
                     mean_value = np.mean(self.episode_mean_values[-5:])
@@ -387,6 +420,9 @@ class Worker:
                             - (current_global_steps % Config.MODEL_SAVE_PERIOD)
                         saver.save(sess,
                                    self.model_path + '/model-' + str(self.last_model_save_steps / 1000) + 'k.cptk')
+                        if Config.INTEGRATED_EVAL:
+                            print('--- Starting integrated evaluation.')
+                            self.start_eval = True
 
                 if Config.VERBOSITY > 0:
                     if episode_count % 100 == 0:
@@ -404,3 +440,57 @@ class Worker:
             print('Shutting down {}...    '.format(self.name))
             self.env.shut_down()
             print('       Sim and client closed.')
+
+    def eval_run(self, sess):
+
+        eval_steps = 0
+
+        depthloss = np.array([])
+        rewards = np.array([])
+        identity = np.eye(8)
+
+        if Config.USE_LSTM:
+            current_rnn_state = self.local_AC.state_init
+
+        self.env.new_episode(integrated_eval=True)
+
+        # episode loop
+        while eval_steps < Config.MAX_EVALUATION_EPISODE_LENGTH-1 and not self.env.is_episode_finished():
+
+            # Preparing inputs
+            feed_dict = {self.local_AC.inputs: [self.env.get_observation()]}
+            ops_to_run = [self.local_AC.policy]
+            if Config.USE_LSTM:
+                feed_dict.update({self.local_AC.state_in[0]: current_rnn_state[0],
+                                  self.local_AC.state_in[1]: current_rnn_state[1]})
+                ops_to_run.append(self.local_AC.state_out)
+            if Config.GOAL_ON:
+                goal_direction = self.env.get_goal_direction()
+                feed_dict.update({self.local_AC.direction_input: goal_direction})
+
+            if Config.AUX_TASK_D2:
+                depth_labels = [np.expand_dims(identity[i][:], 0) for i in
+                                self.env.get_observation(viewmode='depth').flatten()]
+                feed_dict.update({self.local_AC.aux_depth_labels[px]: depth_labels[px] for px in range(4 * 16)})
+                ops_to_run.append(self.local_AC.aux_depth2_loss)
+
+            if Config.USE_LSTM:
+                a_dist, current_rnn_state, depth_loss = sess.run(ops_to_run, feed_dict=feed_dict)
+            else:
+                a_dist, depth_loss = sess.run(ops_to_run, feed_dict=feed_dict)
+
+            # Stochastic action selection
+            a = np.random.choice(a_dist[0], p=a_dist[0])
+            a = np.argmax(a_dist == a)
+
+            # Acting in the environment
+            reward = self.env.action(self.actions[a])
+            eval_steps += 1
+
+            # Collect data from this step
+            depthloss = np.append(depthloss, depth_loss)
+            rewards = np.append(rewards, reward)
+
+        traj = {'goal': [Config.EVAL_GOAL_X, Config.EVAL_GOAL_Y, 150.0], 'traj': self.env.trajectory}
+        return rewards, rewards.mean(), depthloss.mean(), traj
+

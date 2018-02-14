@@ -413,7 +413,7 @@ class Commander:
         self.episode_finished = False
         return
 
-    def new_episode(self, save_trajectory=False, start=None, goal=None):
+    def new_episode(self, save_trajectory=False, start=None, goal=None, integrated_eval=False):
 
         """ Choose new start and goal locations, replace agent. """
 
@@ -423,7 +423,7 @@ class Commander:
         # choose random respawn and goal locations, either randomly or from a list of predetermined locations
         random_heading = (0.0, randint(0, 360), 0.0)
         if Config.RANDOM_SPAWN_LOCATIONS:
-            if Config.EVAL_MODE:
+            if Config.EVAL_MODE or integrated_eval:
                 goal_x = Config.EVAL_GOAL_X
                 goal_y = Config.EVAL_GOAL_Y
                 start_x = Config.EVAL_START_X
