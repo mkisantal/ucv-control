@@ -20,7 +20,11 @@ class Config:
     NUM_WORKERS = 8
     MAX_STEPS = 2e6
     GOAL_ON = True
+    TERMINATE_AT_GOAL = True
     ACCELERATION_ACTIONS = True
+    GOAL_DIRECTION_REWARD = 1.0
+    CRASH_REWARD = -10.0
+    TURN_REWARD = - 0.01
 
     # Auxiliary tasks
     AUX_TASK_D2 = True

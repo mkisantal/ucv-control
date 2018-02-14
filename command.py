@@ -37,10 +37,6 @@ class Commander:
             with open(Config.SIM_DIR_LIST[number] + 'locations.yaml', 'r') as loc_file:
                 self.locations = yaml.load(loc_file)
 
-        # RL rewards
-        self.goal_direction_reward = 1.0
-        self.crash_reward = -10.0
-
         # Agent actions
         if Config.ACCELERATION_ACTIONS:
             self.action_space = ('ang_acc_left', 'ang_acc_right', 'ang_acc_forward')
@@ -268,15 +264,20 @@ class Commander:
         disp = np.array(displacement)
         goal_distance = np.linalg.norm(np.subtract(loc, self.goal_location))
         if goal_distance < 200.0:  # closer than 2 meter to the goal
-            reward = self.goal_direction_reward  # TODO: terminate episode!
-	else:
+            reward = Config.GOAL_DIRECTION_REWARD
+            if Config.TERMINATE_AT_GOAL:
+                self.episode_finished = True
+        else:
             norm_displacement = np.array(displacement) / self.speed
             norm_goal_vector = np.subtract(self.goal_location, prev_loc)\
                                / np.linalg.norm(np.subtract(self.goal_location, prev_loc))
-            reward += np.dot(norm_goal_vector, norm_displacement) * self.goal_direction_reward
+            reward += np.dot(norm_goal_vector, norm_displacement) * Config.GOAL_DIRECTION_REWARD
         if collision:
-            reward += self.crash_reward
+            reward += Config.CRASH_REWARD
             self.episode_finished = True
+
+        if Config.ACCELERATION_ACTIONS:
+            reward += Config.TURN_REWARD * abs(self.angular_speed_state)
 
         return reward
 
