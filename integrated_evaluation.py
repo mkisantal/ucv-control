@@ -24,7 +24,7 @@ def coordinate_evaluation(worker_list, coord):
             if started_episode_count > started_episodes:
                 started_episodes = started_episode_count
                 print('Started {} episodes.'.format(started_episodes))
-            if started_episode_count > Config.MAX_EPISODES_FOR_EVAL - 1:
+            if started_episode_count > Config.EPISODES_FOR_EVAL - 1:
                 print('All {} episodes started.'.format(started_episodes))
                 eval_finished = True
         except KeyboardInterrupt:
@@ -78,7 +78,7 @@ def coordinate_evaluation(worker_list, coord):
         w.eval_trajectories = []
     eval_step = worker_list[0].last_model_save_steps
 
-    eval_path = './EVAL/{}k'.format(int(eval_step / 1))
+    eval_path = './EVAL/{}k'.format(int(eval_step / 1000))
     if not os.path.exists(eval_path):
         os.makedirs(eval_path)
 
@@ -89,7 +89,7 @@ def coordinate_evaluation(worker_list, coord):
                                                 depth_losses.mean(),
                                                 episode_lengths.mean()))
 
-    with open('{}/lc_traj_{}.yaml'.format(eval_path, int(eval_step/1)), 'a+') as traj_yaml:
+    with open('{}/lc_traj_{}.yaml'.format(eval_path, int(eval_step / 1000)), 'a+') as traj_yaml:
         yaml.dump(trajectories, stream=traj_yaml, default_flow_style=False)
 
     with open('./EVAL/learning_curve_data.yaml', 'a+') as data_yaml:
